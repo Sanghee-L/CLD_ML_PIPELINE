@@ -1,30 +1,21 @@
 # CLD-ML-Pipeline
 
 ## Overview
-This project demonstrates a machine-learning-ready data architecture
-and end-to-end pipeline for Cell Line Development (CLD) using synthetic data.
+This repository demonstrates a machine-learning-ready data architecture
+for Cell Line Development (CLD) using synthetic data.
 
-## Key Features
-- ML-optimized ERD for CLD
-- Synthetic multi-level CLD data generation
-- Early clone drop decision modeling
-- Stability prediction using early data
-- Batch-aware ML pipeline
+## Current Status
+🚧 Under active development.
 
-## ERD Design
-<img width="5664" height="2406" alt="ERdiagram_for_CLD_v3" src="https://github.com/user-attachments/assets/143d1b15-cc76-4f5a-9b84-d2f47902e459" />
+Currently included:
+- ML-optimized ERD for CLD<img width="5664" height="2406" alt="ERdiagram_for_CLD_v3" src="https://github.com/user-attachments/assets/38fbed57-0474-48c4-9857-bfb6c50c8859" />
+- SQLite database schema
 
-## Synthetic Data Generation
-- Latent biological factors
-- Batch effects
-- Process condition effects
+## Planned Features
+- Synthetic CLD data generation
+- Feature engineering for clone-level ML
+- Early clone drop simulation
+- Stability prediction models
 
-## ML Tasks
-1. Early clone drop classification
-2. Stability regression
-3. Decision impact simulation
-
-## Why This Matters
-- Reduces CLD time and cost
-- Demonstrates ML-aware data design
-- Applicable to real-world biopharma CLD
+## License
+Apache License 2.0
