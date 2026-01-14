@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="" readonly="0" foreign_keys="" case_sensitive_like="" temp_store="" wal_autocheckpoint="" synchronous=""/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="926"/><column_width id="4" width="0"/></tab_structure><tab_browse><table title="." custom_title="0" dock_id="1" table="0,0:"/><dock_state state="000000ff00000000fd00000001000000020000053600000369fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000005360000010100ffffff0000027e0000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1*">-- Product
+CREATE TABLE product (
+    product_id TEXT PRIMARY KEY,
+    modality TEXT,
+    target_indication TEXT
+);
+
+-- Host Cell
+CREATE TABLE host_cell (
+    host_id TEXT PRIMARY KEY,
+    species TEXT,
+    genetic_background TEXT
+);
+
+-- Vector
+CREATE TABLE vector (
+    vector_id TEXT PRIMARY KEY,
+    promoter TEXT,
+    signal_peptide TEXT,
+    copy_number_est INTEGER
+);
+
+-- Cell Line
+CREATE TABLE cell_line (
+    cell_line_id TEXT PRIMARY KEY,
+    product_id TEXT,
+    host_id TEXT,
+    vector_id TEXT,
+    transfection_date DATE,
+    FOREIGN KEY(product_id) REFERENCES product(product_id),
+    FOREIGN KEY(host_id) REFERENCES host_cell(host_id),
+    FOREIGN KEY(vector_id) REFERENCES vector(vector_id)
+);
+
+-- Clone
+CREATE TABLE clone (
+    clone_id TEXT PRIMARY KEY,
+    cell_line_id TEXT,
+    isolation_method TEXT,
+    clone_rank INTEGER,
+    FOREIGN KEY(cell_line_id) REFERENCES cell_line(cell_line_id)
+);
+
+-- Passage
+CREATE TABLE passage (
+    passage_id TEXT PRIMARY KEY,
+    clone_id TEXT,
+    passage_number INTEGER,
+    culture_duration INTEGER,
+    phase TEXT, -- early / mid / late
+    FOREIGN KEY(clone_id) REFERENCES clone(clone_id)
+);
+
+-- Batch
+CREATE TABLE batch (
+    batch_id TEXT PRIMARY KEY,
+    experiment_type TEXT,
+    run_date DATE,
+    platform TEXT,
+    operator TEXT
+);
+
+-- Assay Result
+CREATE TABLE assay_result (
+    assay_id TEXT PRIMARY KEY,
+    passage_id TEXT,
+    batch_id TEXT,
+    assay_type TEXT,
+    value REAL,
+    unit TEXT,
+    method TEXT,
+    FOREIGN KEY(passage_id) REFERENCES passage(passage_id),
+    FOREIGN KEY(batch_id) REFERENCES batch(batch_id)
+);
+
+-- Omics Sample
+CREATE TABLE omics_sample (
+    omics_id TEXT PRIMARY KEY,
+    clone_id TEXT,
+    passage_id TEXT,
+    batch_id TEXT,
+    omics_type TEXT,
+    timepoint TEXT,
+    FOREIGN KEY(clone_id) REFERENCES clone(clone_id),
+    FOREIGN KEY(passage_id) REFERENCES passage(passage_id),
+    FOREIGN KEY(batch_id) REFERENCES batch(batch_id)
+);
+
+-- Process Condition
+CREATE TABLE process_condition (
+    condition_id TEXT PRIMARY KEY,
+    passage_id TEXT,
+    culture_mode TEXT,
+    temp REAL,
+    pH REAL,
+    feed_strategy TEXT,
+    medium TEXT,
+    FOREIGN KEY(passage_id) REFERENCES passage(passage_id)
+);
+
+-- Stability Test
+CREATE TABLE stability_test (
+    stability_id TEXT PRIMARY KEY,
+    clone_id TEXT,
+    start_passage INTEGER,
+    end_passage INTEGER,
+    productivity_drop_pct REAL,
+    metric_type TEXT,
+    evaluation_method TEXT,
+    FOREIGN KEY(clone_id) REFERENCES clone(clone_id)
+);</sql><current_tab id="0"/></tab_sql></sqlb_project>
