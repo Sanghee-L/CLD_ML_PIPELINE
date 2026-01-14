@@ -14,8 +14,8 @@ Currently included:
 ## Planned Features
 - Synthetic CLD data generation
 - Feature engineering for clone-level ML
-- Early clone drop simulation
-- Stability prediction models
+- Early productivity drop clone screening
+- Stability prediction models (stable or not stable) which apply for fet-batch or perfusion process
 
 ## License
 Apache License 2.0
