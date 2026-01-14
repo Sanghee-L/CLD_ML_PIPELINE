@@ -8,7 +8,7 @@ for Cell Line Development (CLD) using synthetic data.
 🚧 Under active development.
 
 Currently included:
-- ML-optimized ERD for CLD ![CLD ERD] (ERD/ERdiagram_for_CLD_v3.png)
+- ML-optimized ERD for CLD ![CLD ERD](ERD/ERdiagram_for_CLD_v3.png)
 - SQLite database schema
 
 ## Planned Features
