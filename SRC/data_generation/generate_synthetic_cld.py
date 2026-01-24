@@ -207,5 +207,101 @@ def main() -> None:
 
     # --------------------------------------
     # Step 1 : Generate clones + latent truth (Productivity, Stability, Quality)
+    # NOTE: P/S/Q are NOT stored in the DB to avoid ML leakage.
     # --------------------------------------
+
+    clone_ids = [f"CLONE_{i:04d}" for i in range(1, config.n_clones + 1)]
+
+    productivities = np.random.lognormal(mean = config.mu_logP, sigma= config.sigma_logP, size=config.n_clones)
+    stabilities = np.random.beta(a = config.alpha_stability, b = config.beta_stability, size=config.n_clones)
+    quality_potentials = np.clip(
+        np.random.normal(loc = config.mu_quality_potential, scale = config.sigma_quality_potential, size=config.n_clones),
+        0.0, 1.0)
     
+    latents = pd.DataFrame({
+        "clone_id": clone_ids,
+        "productivity": productivities,
+        "stability": stabilities,
+        "quality_potential": quality_potentials,
+    })
+    latents.to_csv(out_dir / "clone_latent_truth.csv", index=False)
+
+    pd.DataFrame({
+        "clone_id": clone_ids,
+        "cell_line_id": "CL001",
+        "isolation_method": "limiting_dilution",
+        "clone_rank": None
+    }).to_sql("clone", conn, if_exists="append", index=False)
+
+    # Assign culture mode per clone (simple scenario; optional realism)
+    culture_mode_by_clone = {cid: ('fed-batch' if np.random.rand() < 0.85 else "perfusion")
+                             for cid in clone_ids}
+    
+    # --------------------------------------
+    # Step 2 / 3/ 4 : Generate passages, process conditions, and assay results
+    # --------------------------------------
+
+    # Data rows to insert
+    passage_rows = []
+    process_condition_rows = []
+    assay_result_rows = []
+
+    # For labels and clone ranking
+    early_titer_sum = {cid: 0.0 for cid in clone_ids}
+    early_titer_n = {cid: 0 for cid in clone_ids}
+    titer_at_p0 = {}
+    titer_at_pf = {}
+
+    mean_P = float(np.mean(productivities))
+
+    for _, row in latents.iterrows():
+        cid = row["clone_id"]
+        mode = culture_mode_by_clone[cid]
+
+        for p in range(1, config.n_passages + 1):
+            passage_id = f"{cid}_P{p:02d}"
+
+            # Passage table row
+            passage_rows.append({
+                "passage_id": passage_id,
+                "clone_id": cid,
+                "passage_number": p,
+                "culture_duration": 7,
+                "phase" : phase_label(p),
+            })
+
+            # Process_Condition table row (per passage)
+            temp = 37.0 + np.random.normal(0, 0.15)
+            pH = 7.0 + np.random.normal(0, 0.05)
+            feed_strategy = "standard" if mode == "fed-batch" else "perfusion"
+            
+            process_condition_rows.append({
+                "condition_id" : f"COND_{passage_id}",
+                "passage_id": passage_id,
+                "culture_mode": mode,
+                "temperature": temp if mode == "fed-batch" else (temp - 0.5),
+                "pH": pH,
+                "dissolved_oxygen": 40.0 + np.random.normal(0, 2.0),
+                "medium": "Chemically defined CHO medium"
+            })
+
+            # Effective productivity after stability-driven decay
+            # This is the key CLD phenomenon
+            # unstable clones (low S) lose expression across passages
+            P_ip = row["productivity"] * np.exp(-config.k_decay * (1 - row["stability"]) * p)
+
+            # Expression burden depends on current productivity (P_ip)
+            expr_burden = (P_ip / mean_P)
+
+            # A mild "environment stress" increases slightly with passage,
+            # while expression stress depends on current burden
+            stress = (config.stress_base +
+                      config.env_stress_slope * p +
+                      config.expr_stress * expr_burden)
+            
+            if mode == "perfusion":
+                stress *= 0.9  # Perfusion reduces stress slightly
+            
+            # Batch ID per passage
+            batch_id = f"B_P{p:02d}"
+            be = batch_effects[batch_id]
