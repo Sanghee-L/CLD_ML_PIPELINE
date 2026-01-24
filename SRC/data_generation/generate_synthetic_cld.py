@@ -26,7 +26,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -173,3 +173,39 @@ def main() -> None:
         "transfection_method" : "Lipofectamine",
     }]).to_sql("cell_line", conn, if_exists="append", index=False)
 
+    # --------------------------------------
+    # Step 0b : Create batches (one assay batch per passage number)
+    # --------------------------------------
+    base_date = date(2026, 1, 24)
+    batch_rows = []
+    batch_effects = {}
+
+    for p in range(1, config.n_passages + 1):
+        batch_id = f"B_P{p:02d}"
+        run_date = base_date + timedelta(days=(p - 1) * 7).isoformat()  # Weekly intervals
+
+        batch_rows.append({
+            "batch_id": batch_id,
+            "experiment_type": "assay_run",
+            "run_date": run_date,
+            "platform": "ELISA | Vi-CELL | SEC-HPLC",
+            "operator": "sim-operator_01"
+        })
+
+        # Hidden systematic offsets for each assay in this batch
+        batch_effects[batch_id] = {
+            "titer": np.random.normal(0, config.batch_titer_sd),
+            "vcd": np.random.normal(0, config.batch_vcd_sd),
+            "viability": np.random.normal(0, config.batch_viability_sd),
+            "aggregation": np.random.normal(0, config.batch_aggregation_sd),
+        }
+
+    pd.DataFrame(batch_rows).to_sql("batch", conn, if_exists="append", index=False)
+    pd.DataFrame([{"batch_id": k, **v} for k, v in batch_effects.items()]).to_csv(
+        out_dir / "batch_effects_truth.csv", index=False)
+    
+
+    # --------------------------------------
+    # Step 1 : Generate clones + latent truth (Productivity, Stability, Quality)
+    # --------------------------------------
+    
