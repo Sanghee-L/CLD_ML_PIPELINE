@@ -305,3 +305,104 @@ def main() -> None:
             # Batch ID per passage
             batch_id = f"B_P{p:02d}"
             be = batch_effects[batch_id]
+
+            # --------------------------------
+            # Assays
+            # --------------------------------
+
+            # Titer depends on effective productivity + noise + batch effect
+            titer_true = config.alpha_titer * P_ip
+            titer = max(0.0, titer_true
+                         + np.random.normal(0, config.titer_noise_sd) + be["titer"])
+            
+            # VCD: increases with passage (adaptation)
+            # As P_ip decays, burden decreases, so VCD can recover later
+            adaptation_factor = (1.0 + config.adapt_vcd * np.log1p(p))
+            burden_factor = np.exp(-config.burden_coeff * expr_burden) # higher burden -> smaller VCD
+            vcd_true = config.base_vcd * adaptation_factor * burden_factor
+            vcd = max(0.0, vcd_true + np.random.normal(0, config.vcd_noise_sd) + be["vcd"])
+
+            # Viability: tends to improve with passage adaptation
+            # and improves when burden decreases (P_pi decays)
+            viab_true = 95.0 + config.adapt_viab * np.log1p(p) - 2.0 * expr_burden
+            viability = float(np.clip(viab_true + np.random.normal(0, config.viability_noise_sd) + be["viability"], 0.0, 100.0))
+
+            # Quality proxy (aggregation): worse when intrinsic quality is low (1 - Q))
+            agg_true = (config.gamma_agg * (1 - row["quality_potential"]) + config.delta_agg * stress)
+            aggregation = float(np.clip(agg_true + np.random.normal(0, config.aggregation_noise_sd)+ be["aggregation"], 0.0, 100.0))
+
+            # Store assay result row
+            assay_result_rows.append([
+                {"assay_id": f"ASSAY_{passage_id}_titer", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "titer", "value": titer, "units": "g/L", "method": "ELISA"},
+                {"assay_id": f"ASSAY_{passage_id}_vcd", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "vcd", "value": vcd, "units": "cells/mL", "method": "Vi-CELL"},
+                {"assay_id": f"ASSAY_{passage_id}_viability", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "viability", "value": viability, "units": "%", "method": "Vi-CELL"},
+                {"assay_id": f"ASSAY_{passage_id}_aggregation", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "aggregation", "value": aggregation, "units": "%", "method": "SEC-HPLC"},
+            ])
+
+            # Collect early passage titer stats for ranking
+            if p <= config.early_max:
+                early_titer_sum[cid] += titer
+                early_titer_n[cid] += 1
+
+            # Collect titer for stability label
+            if p == config.p0:
+                titer_at_p0[cid] = titer
+            if p == config.pf:
+                titer_at_pf[cid] = titer
+        
+    # Insert generated rows into SQLite
+    pd.DataFrame(passage_rows).to_sql("passage", conn, if_exists="append", index=False)
+    pd.DataFrame(process_condition_rows).to_sql("process_condition", conn, if_exists="append", index=False)
+    pd.DataFrame(assay_result_rows).to_sql("assay_result", conn, if_exists="append", index=False)
+
+    # --------------------------------------
+    # Step 5 : Stability label table
+    # --------------------------------------
+
+    stability_rows = []
+    for cid in clone_ids:
+        t0 = float(titer_at_p0.get(cid, np.nan))
+        tf = float(titer_at_pf.get(cid, np.nan))
+
+        if not np.isfinite(t0) or t0 <= 1e-9 or not np.isfinite(tf):
+            drop = np.nan
+        else:
+            drop = (t0 - tf) / t0
+
+        stability_rows.append({
+            "stability_id": cid,
+            "clone_id": cid,
+            "start_passage": config.p0,
+            "end_passage": config.pf,
+            "productivity_drop_pct": drop,
+            "metric_type": "titer_drop",
+            "evaluation_method": "simulated_passage_decay"
+        })
+
+    # Insert stability labels into DB
+    pd.DataFrame(stability_rows).to_sql("stability_test", conn, if_exists="append", index=False)
+
+    # --------------------------------------
+    # Step 6 : Clone ranking based on early passage performance
+    # --------------------------------------
+
+    early_mean = {cid: (early_titer_sum[cid] / early_titer_n[cid] for cid in clone_ids)}
+    sorted_clones = sorted(clone_ids, key=lambda c: early_mean[c], reverse=True)
+
+    updates_rows = [(rank + 1, cid) for rank, cid in enumerate(sorted_clones)]
+    cur.executemany("UPDATE clone SET clone_rank = ? WHERE clone_id = ?", updates_rows)
+
+    # Commit and close
+    conn.commit()
+    conn.close()
+
+    print(f"Generated DB at: {db_path}")
+    print(f"- clones : {config.n_clones}, passages/clone : {config.n_passages}")
+    print(f"- assay rows : {len(assay_result_rows)}")
+    print(f"P quantiles:", np.quantile(latents["productivity"], [0.25, 0.5, 0.75]))
+    print(f"S mean:", np.mean(latents["stability"]))
+    print(f"Q mean:", np.mean(latents["quality_potential"]))
+
+if __name__ == "__main__":
+    main()
+
