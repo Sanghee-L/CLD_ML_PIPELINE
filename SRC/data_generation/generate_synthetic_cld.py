@@ -47,6 +47,10 @@ class Config:
     early_max : int = 7
     late_min : int = 25
 
+    # Stability label window
+    p0 : int = 1
+    pf : int = 30
+
     # Stability: Beta distribution -> bound [0, 1]
     alpha_stability : float = 7.0
     beta_stability : float = 3.0
@@ -66,13 +70,18 @@ class Config:
     titer_noise_sd : float = 0.15  # g/L
     vcd_noise_sd : float = 0.8e6   # cells/mL
     viability_noise_sd : float = 1.5  # fraction
-    aggregation_noise_sd : float = 0.03  # fraction
+    aggregation_noise_sd : float = 0.3  # fraction
 
     # Batch effect SDs (systemic offsets per passage-run)
     batch_titer_sd : float = 0.05  # g/L
     batch_vcd_sd : float = 0.3e6   # cells/mL
     batch_viability_sd : float = 0.4  # fraction
     batch_aggregation_sd : float = 0.02  # fraction
+
+    # Burden/adaptation parameters
+    burden_coeff: float = 0.35  # how strongly burden affects VCD
+    adapt_vcd: float = 0.06   # VCD improvement with passage
+    adapt_viab: float = 1.2    # Viability improvement with passage
 
     # Stress model affects quality (aggregation)
     stress_base: float = 0.08
@@ -150,7 +159,7 @@ def main() -> None:
     }]).to_sql("product", conn, if_exists="append", index=False)
 
     pd.DataFrame([{
-        "host_cell_id": "CHO-K1",
+        "host_id": "CHO-K1",
         "species" : "Cricetulus griseus",
         "genetic_background" : "CHO-K1 reference",
         }]).to_sql("host_cell", conn, if_exists="append", index=False) 
@@ -182,7 +191,7 @@ def main() -> None:
 
     for p in range(1, config.n_passages + 1):
         batch_id = f"B_P{p:02d}"
-        run_date = base_date + timedelta(days=(p - 1) * 7).isoformat()  # Weekly intervals
+        run_date = (base_date + timedelta(days=(p - 1) * 7)).isoformat()  # Weekly intervals
 
         batch_rows.append({
             "batch_id": batch_id,
@@ -194,15 +203,17 @@ def main() -> None:
 
         # Hidden systematic offsets for each assay in this batch
         batch_effects[batch_id] = {
-            "titer": np.random.normal(0, config.batch_titer_sd),
+            "titer": np.random.lognormal(0, config.batch_titer_sd),
             "vcd": np.random.normal(0, config.batch_vcd_sd),
             "viability": np.random.normal(0, config.batch_viability_sd),
             "aggregation": np.random.normal(0, config.batch_aggregation_sd),
         }
-
+    # Insert batches into DB
     pd.DataFrame(batch_rows).to_sql("batch", conn, if_exists="append", index=False)
+    
+    # Store batch effects truths for validation
     pd.DataFrame([{"batch_id": k, **v} for k, v in batch_effects.items()]).to_csv(
-        out_dir / "batch_effects_truth.csv", index=False)
+        out_dir / "batch_effects_truths.csv", index=False)
     
 
     # --------------------------------------
@@ -224,7 +235,7 @@ def main() -> None:
         "stability": stabilities,
         "quality_potential": quality_potentials,
     })
-    latents.to_csv(out_dir / "clone_latent_truth.csv", index=False)
+    latents.to_csv(out_dir / "clone_latent_truths.csv", index=False)
 
     pd.DataFrame({
         "clone_id": clone_ids,
@@ -279,9 +290,8 @@ def main() -> None:
                 "condition_id" : f"COND_{passage_id}",
                 "passage_id": passage_id,
                 "culture_mode": mode,
-                "temperature": temp if mode == "fed-batch" else (temp - 0.5),
+                "temp": temp if mode == "fed-batch" else (temp - 0.5),
                 "pH": pH,
-                "dissolved_oxygen": 40.0 + np.random.normal(0, 2.0),
                 "medium": "Chemically defined CHO medium"
             })
 
@@ -370,7 +380,7 @@ def main() -> None:
             drop = (t0 - tf) / t0
 
         stability_rows.append({
-            "stability_id": cid,
+            "stability_id": f"STB_{cid}",
             "clone_id": cid,
             "start_passage": config.p0,
             "end_passage": config.pf,
@@ -386,7 +396,7 @@ def main() -> None:
     # Step 6 : Clone ranking based on early passage performance
     # --------------------------------------
 
-    early_mean = {cid: (early_titer_sum[cid] / early_titer_n[cid] for cid in clone_ids)}
+    early_mean = {cid: (early_titer_sum[cid] / max(1, early_titer_n[cid])) for cid in clone_ids}
     sorted_clones = sorted(clone_ids, key=lambda c: early_mean[c], reverse=True)
 
     updates_rows = [(rank + 1, cid) for rank, cid in enumerate(sorted_clones)]

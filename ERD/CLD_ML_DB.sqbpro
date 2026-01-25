@@ -17,6 +17,7 @@ CREATE TABLE vector (
     vector_id TEXT PRIMARY KEY,
     promoter TEXT,
     signal_peptide TEXT,
+    backborn TEXT,
     copy_number_est INTEGER
 );
 
@@ -27,6 +28,8 @@ CREATE TABLE cell_line (
     host_id TEXT,
     vector_id TEXT,
     transfection_date DATE,
+    transfection_method TEXT,
+    selection_marker TEXT,
     FOREIGN KEY(product_id) REFERENCES product(product_id),
     FOREIGN KEY(host_id) REFERENCES host_cell(host_id),
     FOREIGN KEY(vector_id) REFERENCES vector(vector_id)
