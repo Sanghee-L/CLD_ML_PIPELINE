@@ -323,7 +323,7 @@ def main() -> None:
             # Titer depends on effective productivity + noise + batch effect
             titer_true = config.alpha_titer * P_ip
             titer = max(0.0, titer_true
-                         + np.random.normal(0, config.titer_noise_sd) + be["titer"])
+                         + np.random.lognormal(0, config.titer_noise_sd) + be["titer"])
             
             # VCD: increases with passage (adaptation)
             # As P_ip decays, burden decreases, so VCD can recover later
