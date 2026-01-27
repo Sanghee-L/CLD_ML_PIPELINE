@@ -10,9 +10,9 @@ for Cell Line Development (CLD) using synthetic data.
 Currently included:
 - ML-optimized ERD for CLD ![CLD ERD](ERD/ERdiagram_for_CLD_v3.png)
 - SQLite database schema
+- Synthetic CLD data generation
 
 ## Planned Features
-- Synthetic CLD data generation
 - Feature engineering for clone-level ML
 - Early productivity drop clone screening
 - Stability prediction models (stable or not stable) which apply for fet-batch or perfusion process
