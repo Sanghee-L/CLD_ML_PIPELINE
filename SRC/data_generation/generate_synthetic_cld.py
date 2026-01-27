@@ -44,12 +44,19 @@ class Config:
     n_passages : int = 30
 
     # Phase labeling (to prevent ML leakage)
-    early_max : int = 7
-    late_min : int = 25
+    early_max : int = 5
+    late_min : int = 26
 
     # Stability label window
-    p0 : int = 1
-    pf : int = 30
+    stability_early_start: int = 1
+    stability_early_end: int = 5
+    stability_late_start: int = 26
+    stability_late_end: int = 30
+
+    # Latent Distributions
+    # Productivity: Log-normal distribution
+    mu_logP : float = 4.0  # log-mean
+    sigma_logP : float = 0.7  # log-stddev
 
     # Stability: Beta distribution -> bound [0, 1]
     alpha_stability : float = 7.0
@@ -260,8 +267,12 @@ def main() -> None:
     # For labels and clone ranking
     early_titer_sum = {cid: 0.0 for cid in clone_ids}
     early_titer_n = {cid: 0 for cid in clone_ids}
-    titer_at_p0 = {}
-    titer_at_pf = {}
+
+    # For stbility label using averages
+    stab_early_sum = {cid: 0.0 for cid in clone_ids}
+    stab_early_n = {cid: 0 for cid in clone_ids}
+    stab_late_sum = {cid: 0.0 for cid in clone_ids}
+    stab_late_n = {cid: 0 for cid in clone_ids}
 
     mean_P = float(np.mean(productivities))
 
@@ -355,10 +366,13 @@ def main() -> None:
                 early_titer_n[cid] += 1
 
             # Collect titer for stability label
-            if p == config.p0:
-                titer_at_p0[cid] = titer
-            if p == config.pf:
-                titer_at_pf[cid] = titer
+            if config.stability_early_start <= p <= config.stability_early_end:
+                stab_early_sum[cid] += titer
+                stab_early_n[cid] += 1
+            if config.stability_late_start <= p <= config.stability_late_end:
+                stab_late_sum[cid] += titer
+                stab_late_n[cid] += 1
+
         
     # Insert generated rows into SQLite
     pd.DataFrame(passage_rows).to_sql("passage", conn, if_exists="append", index=False)
@@ -371,13 +385,16 @@ def main() -> None:
 
     stability_rows = []
     for cid in clone_ids:
-        t0 = float(titer_at_p0.get(cid, np.nan))
-        tf = float(titer_at_pf.get(cid, np.nan))
+        n0 = stab_early_n[cid]
+        nf = stab_late_n[cid]
 
-        if not np.isfinite(t0) or t0 <= 1e-9 or not np.isfinite(tf):
+        early_mean = (stab_early_sum[cid] / n0) if n0 > 0 else np.nan
+        late_mean = (stab_late_sum[cid] / nf) if nf > 0 else np.nan
+
+        if not np.isfinite(early_mean) or early_mean <= 1e-9 or not np.isfinite(late_mean):
             drop = np.nan
         else:
-            drop = (t0 - tf) / t0
+            drop = (early_mean - late_mean) / early_mean
 
         stability_rows.append({
             "stability_id": f"STB_{cid}",
@@ -396,12 +413,14 @@ def main() -> None:
     # Step 6 : Clone ranking based on early passage performance
     # --------------------------------------
 
-    early_mean = {cid: (early_titer_sum[cid] / max(1, early_titer_n[cid])) for cid in clone_ids}
-    sorted_clones = sorted(clone_ids, key=lambda c: early_mean[c], reverse=True)
+    early_mean_rank = {
+        cid: (early_titer_sum[cid] / max(1, early_titer_n[cid]))
+        for cid in clone_ids
+    }
+    sorted_clones = sorted(clone_ids, key=lambda c: early_mean_rank[c], reverse=True)
 
-    updates_rows = [(rank + 1, cid) for rank, cid in enumerate(sorted_clones)]
-    cur.executemany("UPDATE clone SET clone_rank = ? WHERE clone_id = ?", updates_rows)
-
+    updates = [(rank + 1, cid) for rank, cid in enumerate(sorted_clones)]
+    cur.executemany("UPDATE clone SET clone_rank = ? WHERE clone_id = ?", updates)
     # Commit and close
     conn.commit()
     conn.close()
