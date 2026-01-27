@@ -181,11 +181,11 @@ def main() -> None:
 
     pd.DataFrame([{
         "cell_line_id": "CL001",
-        "host_cell_id": "CHO-K1",
+        "host_id": "CHO-K1",
         "vector_id": "V001",
         "selection_marker" : "Neomycin",
         "product_id" : "P001",
-        "transfection_date" : datetime(2026, 1, 24),
+        "transfection_date" : "2026-01-24",
         "transfection_method" : "Lipofectamine",
     }]).to_sql("cell_line", conn, if_exists="append", index=False)
 
@@ -210,7 +210,7 @@ def main() -> None:
 
         # Hidden systematic offsets for each assay in this batch
         batch_effects[batch_id] = {
-            "titer": np.random.lognormal(0, config.batch_titer_sd),
+            "titer": np.random.normal(0, config.batch_titer_sd),
             "vcd": np.random.normal(0, config.batch_vcd_sd),
             "viability": np.random.normal(0, config.batch_viability_sd),
             "aggregation": np.random.normal(0, config.batch_aggregation_sd),
@@ -303,6 +303,7 @@ def main() -> None:
                 "culture_mode": mode,
                 "temp": temp if mode == "fed-batch" else (temp - 0.5),
                 "pH": pH,
+                "feed_strategy": feed_strategy,
                 "medium": "Chemically defined CHO medium"
             })
 
@@ -334,7 +335,7 @@ def main() -> None:
             # Titer depends on effective productivity + noise + batch effect
             titer_true = config.alpha_titer * P_ip
             titer = max(0.0, titer_true
-                         + np.random.lognormal(0, config.titer_noise_sd) + be["titer"])
+                         + np.random.normal(0, config.titer_noise_sd) + be["titer"])
             
             # VCD: increases with passage (adaptation)
             # As P_ip decays, burden decreases, so VCD can recover later
@@ -349,15 +350,15 @@ def main() -> None:
             viability = float(np.clip(viab_true + np.random.normal(0, config.viability_noise_sd) + be["viability"], 0.0, 100.0))
 
             # Quality proxy (aggregation): worse when intrinsic quality is low (1 - Q))
-            agg_true = (config.gamma_agg * (1 - row["quality_potential"]) + config.delta_agg * stress)
+            agg_true = (config.gamma_agg_intrinsic * (1 - row["quality_potential"]) + config.delta_agg_stress * stress)
             aggregation = float(np.clip(agg_true + np.random.normal(0, config.aggregation_noise_sd)+ be["aggregation"], 0.0, 100.0))
 
             # Store assay result row
-            assay_result_rows.append([
-                {"assay_id": f"ASSAY_{passage_id}_titer", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "titer", "value": titer, "units": "g/L", "method": "ELISA"},
-                {"assay_id": f"ASSAY_{passage_id}_vcd", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "vcd", "value": vcd, "units": "cells/mL", "method": "Vi-CELL"},
-                {"assay_id": f"ASSAY_{passage_id}_viability", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "viability", "value": viability, "units": "%", "method": "Vi-CELL"},
-                {"assay_id": f"ASSAY_{passage_id}_aggregation", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "aggregation", "value": aggregation, "units": "%", "method": "SEC-HPLC"},
+            assay_result_rows.extend([
+                {"assay_id": f"ASSAY_{passage_id}_titer", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "titer", "value": titer, "unit": "g/L", "method": "ELISA"},
+                {"assay_id": f"ASSAY_{passage_id}_vcd", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "vcd", "value": vcd, "unit": "cells/mL", "method": "Vi-CELL"},
+                {"assay_id": f"ASSAY_{passage_id}_viability", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "viability", "value": viability, "unit": "%", "method": "Vi-CELL"},
+                {"assay_id": f"ASSAY_{passage_id}_aggregation", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "aggregation", "value": aggregation, "unit": "%", "method": "SEC-HPLC"},
             ])
 
             # Collect early passage titer stats for ranking
@@ -399,11 +400,11 @@ def main() -> None:
         stability_rows.append({
             "stability_id": f"STB_{cid}",
             "clone_id": cid,
-            "start_passage": config.p0,
-            "end_passage": config.pf,
+            "start_passage": config.stability_early_start,
+            "end_passage": config.stability_late_end,
             "productivity_drop_pct": drop,
             "metric_type": "titer_drop",
-            "evaluation_method": "simulated_passage_decay"
+            "evaluation_method": f"avg_titer_p{config.stability_early_start}-{config.stability_early_end}_vs_p{config.stability_late_start}-{config.stability_late_end}"
         })
 
     # Insert stability labels into DB
