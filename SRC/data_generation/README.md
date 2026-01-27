@@ -68,7 +68,7 @@ This simulator encodes typical CLD phenomena:
 Stability is computed as:
 
 - Early mean titer = average titer over passages **1–5**
-- Late mean titer = average titer over passages **25–30**
+- Late mean titer = average titer over passages **26–30**
 - Drop (%):
 
 `drop = (early_mean - late_mean) / early_mean`
