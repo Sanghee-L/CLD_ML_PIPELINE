@@ -44,12 +44,12 @@ class Config:
     n_passages : int = 30
 
     # Phase labeling (to prevent ML leakage)
-    early_max : int = 5
+    early_max : int = 10
     late_min : int = 26
 
     # Stability label window
-    stability_early_start: int = 1
-    stability_early_end: int = 5
+    stability_early_start: int = 3
+    stability_early_end: int = 10
     stability_late_start: int = 26
     stability_late_end: int = 30
 
@@ -67,7 +67,7 @@ class Config:
     sigma_quality_potential : float = 0.15
 
     # Productivity decay sensitivity
-    k_decay : float = 0.03
+    k_decay : float = 0.05
 
     # Scaling from latent P -> physical units
     alpha_titer : float = 0.03 # latetn units to g/L
