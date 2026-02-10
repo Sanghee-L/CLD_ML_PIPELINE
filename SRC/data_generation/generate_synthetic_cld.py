@@ -40,7 +40,7 @@ class Config:
     seed : int = 42
 
     # Dataset sizes
-    n_clones : int = 500
+    n_clones : int = 2000
     n_passages : int = 30
 
     # Phase labeling (to prevent ML leakage)
@@ -142,7 +142,7 @@ def main() -> None:
     schema_path = root / "data" / "schema" / "cld_schema.sql"
     out_dir = root / "data" / "synthetic" / "raw"
     out_dir.mkdir(parents=True, exist_ok=True)
-    db_path = out_dir / "cld.db"
+    db_path = out_dir / f"cld_{config.n_clones}clones.db"
 
     # Ensure fresh DB
     ensure_fresh_db(db_path)
@@ -220,9 +220,8 @@ def main() -> None:
     
     # Store batch effects truths for validation
     pd.DataFrame([{"batch_id": k, **v} for k, v in batch_effects.items()]).to_csv(
-        out_dir / "batch_effects_truths.csv", index=False)
+        out_dir / f"batch_effects_truths_{config.n_clones}.csv", index=False)
     
-
     # --------------------------------------
     # Step 1 : Generate clones + latent truth (Productivity, Stability, Quality)
     # NOTE: P/S/Q are NOT stored in the DB to avoid ML leakage.
@@ -242,7 +241,7 @@ def main() -> None:
         "stability": stabilities,
         "quality_potential": quality_potentials,
     })
-    latents.to_csv(out_dir / "clone_latent_truths.csv", index=False)
+    latents.to_csv(out_dir / f"clone_latent_truths_{config.n_clones}.csv", index=False)
 
     pd.DataFrame({
         "clone_id": clone_ids,
