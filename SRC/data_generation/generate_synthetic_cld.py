@@ -81,16 +81,16 @@ class Config:
     # Platform factor (project-level + clonal residual)
     # --------------------------------------
     # Interpretation:
-    # - G_project models a platfrom upgrade (e.g., targeted integration + anti-silencing + secretion tunning)
+    # - G_project models a platform upgrade (e.g., targeted integration + anti-silencing + secretion tuning)
     # - g_clone models residual clone-to-clone variability
     
-    G_project: float = 0.0 # 0.0 = baseline platform, 1.0 = upgraded platfrom (we can change later)
+    G_project: float = 0.0 # 0.0 = baseline platform, 1.0 = upgraded platform (we can change later)
     g_clone_sd: float = 0.35 # residual variability; reduce this for stronger targeted integration
 
-    platform_strength_P: float = 0.25 # effect of platfrom on productivity latent P
-    platform_strength_S: float = 0.20 # effect of platfrom on stability latent S
-    platform_strength_Q: float = 0.15 # effect of platfrom on quality latent Q
-    platform_stress_relief: float = 0.10 # platfrom reduces stress slightly (lower agg risk)
+    platform_strength_P: float = 0.25 # effect of platform on productivity latent P
+    platform_strength_S: float = 0.20 # effect of platform on stability latent S
+    platform_strength_Q: float = 0.15 # effect of platform on quality latent Q
+    platform_stress_relief: float = 0.10 # platform reduces stress slightly (lower agg risk)
 
     # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
@@ -300,7 +300,7 @@ def main() -> None:
     # Copy number (true + observed ddPCR)
     if config.enable_copy_number:
         CN_true = np.random.lognormal(mean = np.log(config.cn_mean), sigma = config.cn_sigma, size = config.n_clones)
-        CN_true = np.clip(CN_true, 1.0, config.cn_max).astype(int)
+        CN_true = np.clip(np.round(CN_true), 1, config.cn_max).astype(int)
         CN_obs = np.clip(np.round(CN_true + np.random.normal(0.0, config.ddpcr_noise_sd, size=config.n_clones)), 0, config.cn_max *2).astype(int)
     else:
         CN_true = np.ones(config.n_clones, dtype=int)
@@ -330,9 +330,8 @@ def main() -> None:
         "stability": stabilities,
         "quality_potential": quality_potentials,
         "G_platform": G,
-        "CN_ture": CN_true,
+        "CN_true": CN_true,
         "CN_obs": CN_obs,
-        "platform_factor": G,
         "k_decay_i": k_decay_i,
     })
     
@@ -426,7 +425,9 @@ def main() -> None:
             
             # Platform can reduce stress slightly (better folding/secretion robustness)
             if config.enable_platform:
-                stress *= (1.0 - config.platform_stress_relief * (g_by_clone[cid] - 0.5))
+                factor = 1.0 - config.platform_stress_relief * (g_by_clone[cid] - 0.5)
+                factor = np.clip(factor, 0.8, 1.2)  # prevent extreme relief
+                stress *= factor
 
             
             if mode == "perfusion":
@@ -472,7 +473,7 @@ def main() -> None:
             # ddPCR copy number assay (store once per clone at the start of stability early window)
             if config.enable_copy_number and p == config.stability_early_start:
                 assay_result_rows.append({
-                    "assay_id": f"ASSAY_{cid}_ddpcr_cn",
+                    "assay_id": f"ASSAY_{passage_id}_ddpcr_cn",
                     "passage_id": passage_id,
                     "batch_id": batch_id,
                     "assay_type": "ddpcr_cn",
