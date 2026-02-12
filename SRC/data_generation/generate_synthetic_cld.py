@@ -69,6 +69,46 @@ class Config:
     # Productivity decay sensitivity
     k_decay : float = 0.05
 
+    # --------------------------------------
+    # Feature switches (ablation-ready)
+    # --------------------------------------
+
+    enable_platform: bool = True
+    enable_copy_number: bool = True
+    enable_clone_decay_variation: bool = True
+
+    # --------------------------------------
+    # Platform factor (project-level + clonal residual)
+    # --------------------------------------
+    # Interpretation:
+    # - G_project models a platfrom upgrade (e.g., targeted integration + anti-silencing + secretion tunning)
+    # - g_clone models residual clone-to-clone variability
+    
+    G_project: float = 0.0 # 0.0 = baseline platform, 1.0 = upgraded platfrom (we can change later)
+    g_clone_sd: float = 0.35 # residual variability; reduce this for stronger targeted integration
+
+    platform_strength_P: float = 0.25 # effect of platfrom on productivity latent P
+    platform_strength_S: float = 0.20 # effect of platfrom on stability latent S
+    platform_strength_Q: float = 0.15 # effect of platfrom on quality latent Q
+    platform_stress_relief: float = 0.10 # platfrom reduces stress slightly (lower agg risk)
+
+    # --------------------------------------
+    # Copy number (ddPCR-like assay) effect on productivity
+    # --------------------------------------
+
+    cn_mean: float = 3.0  # average copy number
+    cn_sigma: float = 0.35 # log-normal sigma
+    cn_max: int = 20    # max copy number
+    cn_effect_P: float = 0.18 # Copy number increase P (diminishing returns via log1p)
+    cn_penalty_S: float = 0.05 # Copy number slightly decrease S (higher CNV instability - burden)
+    cn_penalty_Q: float = 0.03 # Copy number slightly decrease Q (higher burden)
+    ddpcr_noise_sd: float = 0.35 # measurement noise in obserbved Copy Number
+
+    # --------------------------------------
+    # Clone-specific decay variation
+    # --------------------------------------
+    k_decay_sd: float = 0.25 # k_i = k_decay * exp(N(0, k_decay_sd)) 
+
     # Scaling from latent P -> physical units
     alpha_titer : float = 0.03 # latetn units to g/L
     base_vcd : float = 15e6  # cells/mL
@@ -229,19 +269,80 @@ def main() -> None:
 
     clone_ids = [f"CLONE_{i:04d}" for i in range(1, config.n_clones + 1)]
 
-    productivities = np.random.lognormal(mean = config.mu_logP, sigma= config.sigma_logP, size=config.n_clones)
-    stabilities = np.random.beta(a = config.alpha_stability, b = config.beta_stability, size=config.n_clones)
-    quality_potentials = np.clip(
+    #productivities = np.random.lognormal(mean = config.mu_logP, sigma= config.sigma_logP, size=config.n_clones)
+    #stabilities = np.random.beta(a = config.alpha_stability, b = config.beta_stability, size=config.n_clones)
+    #quality_potentials = np.clip(
+    #    np.random.normal(loc = config.mu_quality_potential, scale = config.sigma_quality_potential, size=config.n_clones),
+    #    0.0, 1.0)
+    
+    # ------------------------------
+    # Latent truth generation (P/S/Q) + platform + copy number + clone-specific decay
+    # Notes:
+    # - We do NOT store these latents in DB tables (avoid ML leakage)
+    # - We export them to CSV for validation and debugging
+    # ------------------------------
+
+    # Base latents
+    P_base = np.random.lognormal(mean = config.mu_logP, sigma= config.sigma_logP, size=config.n_clones)
+    S_base = np.random.beta(a = config.alpha_stability, b = config.beta_stability, size=config.n_clones)
+    Q_base = np.clip(
         np.random.normal(loc = config.mu_quality_potential, scale = config.sigma_quality_potential, size=config.n_clones),
         0.0, 1.0)
     
+    # Platform factor: project-level + clonal residual
+    if config.enable_platform:
+        g_clone = np.random.normal(0.0, config.g_clone_sd, size=config.n_clones)
+        G = np.clip(config.G_project + g_clone, -2.0, 2.0) # keep bounded before sigmoid-like transform
+        G = 1.0 / (1.0 + np.exp(-G))  # sigmoid transform to [0, 1]
+    else:
+        G = np.full(config.n_clones, 0.5)  # Neutral effect
+
+    # Copy number (true + observed ddPCR)
+    if config.enable_copy_number:
+        CN_true = np.random.lognormal(mean = np.log(config.cn_mean), sigma = config.cn_sigma, size = config.n_clones)
+        CN_true = np.clip(CN_true, 1.0, config.cn_max).astype(int)
+        CN_obs = np.clip(np.round(CN_true + np.random.normal(0.0, config.ddpcr_noise_sd, size=config.n_clones)), 0, config.cn_max *2).astype(int)
+    else:
+        CN_true = np.ones(config.n_clones, dtype=int)
+        CN_obs = CN_true.copy()
+
+    # Apply platform/copy-number effects to P/S/Q
+    # - CN increases productivity (dimisnihing returns)
+    # - CN slightly penalizes stability and quality (expression burden)
+
+    P = P_base * np.exp(config.platform_strength_P * (G - 0.5)) * np.exp(config.cn_effect_P * np.log1p(CN_true))
+    S = np.clip(S_base + config.platform_strength_S * (G - 0.5) - config.cn_penalty_S * np.log1p(CN_true), 0.0, 1.0)
+    Q = np.clip(Q_base + config.platform_strength_Q * (G - 0.5) - config.cn_penalty_Q * np.log1p(CN_true), 0.0, 1.0)
+
+    # Clone-specific decay sensitivity
+    if config.enable_clone_decay_variation:
+        k_decay_i = config.k_decay * np.exp(np.random.normal(0.0, config.k_decay_sd, size=config.n_clones))
+    else:
+        k_decay_i = np.full(config.n_clones, config.k_decay)
+
+    productivities = P
+    stabilities = S
+    quality_potentials = Q
+
     latents = pd.DataFrame({
         "clone_id": clone_ids,
         "productivity": productivities,
         "stability": stabilities,
         "quality_potential": quality_potentials,
+        "G_platform": G,
+        "CN_ture": CN_true,
+        "CN_obs": CN_obs,
+        "platform_factor": G,
+        "k_decay_i": k_decay_i,
     })
+    
+    
     latents.to_csv(out_dir / f"clone_latent_truths_{config.n_clones}.csv", index=False)
+
+    # Lookup maps for fast access inside passage loop
+    cn_obs_by_clone = dict(zip(latents["clone_id"], latents["CN_obs"]))
+    kdecay_by_clone = dict(zip(latents["clone_id"], latents["k_decay_i"]))
+    g_by_clone = dict(zip(latents["clone_id"], latents["G_platform"]))
 
     pd.DataFrame({
         "clone_id": clone_ids,
@@ -309,16 +410,24 @@ def main() -> None:
             # Effective productivity after stability-driven decay
             # This is the key CLD phenomenon
             # unstable clones (low S) lose expression across passages
-            P_ip = row["productivity"] * np.exp(-config.k_decay * (1 - row["stability"]) * p)
+
+            # Clone-specific decay sensitivity (k_decay_i) makes decay speed heterogenous across clones
+            k_i = kdecay_by_clone[cid]
+            P_ip = row["productivity"] * np.exp(-k_i * (1 - row["stability"]) * p)
 
             # Expression burden depends on current productivity (P_ip)
             expr_burden = (P_ip / mean_P)
 
             # A mild "environment stress" increases slightly with passage,
             # while expression stress depends on current burden
-            stress = (config.stress_base +
+            stress = (config.stress_base + 
                       config.env_stress_slope * p +
                       config.expr_stress * expr_burden)
+            
+            # Platform can reduce stress slightly (better folding/secretion robustness)
+            if config.enable_platform:
+                stress *= (1.0 - config.platform_stress_relief * (g_by_clone[cid] - 0.5))
+
             
             if mode == "perfusion":
                 stress *= 0.9  # Perfusion reduces stress slightly
@@ -359,6 +468,20 @@ def main() -> None:
                 {"assay_id": f"ASSAY_{passage_id}_viability", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "viability", "value": viability, "unit": "%", "method": "Vi-CELL"},
                 {"assay_id": f"ASSAY_{passage_id}_aggregation", "passage_id": passage_id, "batch_id": batch_id, "assay_type": "aggregation", "value": aggregation, "unit": "%", "method": "SEC-HPLC"},
             ])
+
+            # ddPCR copy number assay (store once per clone at the start of stability early window)
+            if config.enable_copy_number and p == config.stability_early_start:
+                assay_result_rows.append({
+                    "assay_id": f"ASSAY_{cid}_ddpcr_cn",
+                    "passage_id": passage_id,
+                    "batch_id": batch_id,
+                    "assay_type": "ddpcr_cn",
+                    "value": float(cn_obs_by_clone[cid]),
+                    "unit": "copies/cell",
+                    "method": "ddPCR",
+                })
+
+
 
             # Collect early passage titer stats for ranking
             if p <= config.early_max:

@@ -101,3 +101,6 @@ CREATE TABLE stability_test (
     evaluation_method TEXT,
     FOREIGN KEY(clone_id) REFERENCES clone(clone_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_assay_result_type ON assay_result(assay_type);
+CREATE INDEX IF NOT EXISTS idx_passage_clone ON passage(clone_id, passage_number);
