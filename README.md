@@ -2,18 +2,21 @@
 
 Simulation-driven clone selection framework for Cell Line Development (CLD)
 
-## Vision
+## 🚀 Vision
 
-Cell Line Development (CLD) remains one of the most resource-intensive stages in biologics manufacturing.
-Despite advances in AI for drug discovery, predictive modeling for biomanufacturing platforms is still underdeveloped.
+Cell Line Development (CLD) is one of the most time- and cost-intensive stages in biologics manufacturing.
 
-This project aims to build a Simulation-Driven Laboratory (SDL) framework for CLD, enabling:
-	•	Early-stage clone ranking
-	•	Late-stage outcome prediction
-	•	Multi-objective decision simulation
-	•	Platform engineering scenario testing
+While AI has advanced drug discovery, predictive modeling for **biomanufacturing platforms** remains underdeveloped.
+
+This project aims to build a **Simulation-Driven Laboratory (SDL) framework for CLD**, enabling:
+
+- Early-stage clone ranking  
+- Late-stage outcome prediction  
+- Multi-objective decision modeling  
+- Platform engineering scenario simulation  
 
 The long-term goal is to reduce CLD time, cost, and experimental burden using predictive modeling.
+---
 
 ## Concept
 
