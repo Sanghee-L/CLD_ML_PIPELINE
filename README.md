@@ -115,16 +115,74 @@ Evaluation includes:
 
 We simulate commercial clone selection using:
 
-'''Utility = a*z(late_titer)
+Utility = a*z(late_titer)
         - b*z(drop)
-        - c*z(late_aggregation)'''
+        - c*z(late_aggregation)
 
 We evaluate:
 	•	Top 5 / 10 / 20 retention
 	•	True-good recall
 	•	Ranking robustness
 
+## Platform Scenario Modeling
 
+The framework supports comparison between:
+	•	Legacy random integration
+	•	Targeted integration platform
+	•	High-copy unstable clones
+	•	Optimized secretion pathway
+
+This allows:
+
+Testing whether platform engineering improves early predictability.
+
+## Scientific Foundations
+
+This work is informed by:
+	•	Reinhart et al., Biotechnol J (2018)
+	•	Lakshmanan et al., Biotechnol Bioeng (2019)
+
+Multi-omics evidence shows host-specific behavior and complex regulation of productivity and quality.
+
+## Key Insight
+
+Early → Late prediction is inherently difficult due to:
+	•	Epigenetic silencing
+	•	Stress accumulation
+	•	Secretion bottlenecks
+	•	Platform effects
+	•	Stochastic events
+
+Therefore, the goal is not perfect prediction, but:
+
+Enrichment improvement under uncertainty.
+
+## Future Directions
+	•	Multi-omics integration
+	•	Glycosylation modeling
+	•	Secretory capacity modeling
+	•	Platform upgrade simulation
+	•	Automated weight tuning (policy optimization)
+	•	Real CLD dataset validation
+	•	Robotic integration
+
+## Current Status
+
+✔ Synthetic CLD simulator
+✔ Multi-target ML modeling
+✔ Ranking evaluation framework
+✔ Platform scenario switches
+✔ Copy number integration
+✔ Decision simulation engine
+
+Ongoing work:
+	•	Improve early → late signal strength
+	•	Platform scenario calibration
+	•	Advanced ranking metrics
+
+## Author’s Motivation
+
+This project originates from real CLD experience in biologics manufacturing and aims to bridge AI modeling with upstream bioprocess engineering.
 
 ## License
 Apache License 2.0
