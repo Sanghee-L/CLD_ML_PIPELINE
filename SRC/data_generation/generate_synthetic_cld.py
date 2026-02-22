@@ -27,6 +27,7 @@ import sqlite3
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import date, timedelta
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -91,6 +92,18 @@ class Config:
     platform_strength_S: float = 0.20 # effect of platform on stability latent S
     platform_strength_Q: float = 0.15 # effect of platform on quality latent Q
     platform_stress_relief: float = 0.10 # platform reduces stress slightly (lower agg risk)
+
+    # --------------------------------------
+    # Platform scenario adjustments (legacy vs optimized)
+    # --------------------------------------
+    enable_platform_groups: bool = True
+    frac_optimized: float = 0.30 # fraction of clones on optimized platform (used only if grouping is enabled)
+
+    G_legacy: float = 0.0
+    G_optimized: float = 1.0
+
+    optimized_decay_mult: float = 0.7 # optimized platform reduces decay sensitivity by this factor
+    optimized_cn_effect_mult: float = 1.25 # optimized platform increases CN effect on productivity by this factor (e.g., better expression machinery can better leverage higher CN)
 
     # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
@@ -169,12 +182,56 @@ def ensure_fresh_db(db_path: Path) -> None:
     if db_path.exists():
         db_path.unlink()
 
+def apply_scenario(base: Config, scenario: str) -> Config:
+    """
+    Return a new Config object with scenario-specific overrides.
+    We keep everything else identical for fair comparisons.
+    """
+
+    scenario = scenario.lower()
+    if scenario == "legacy":
+        return Config(
+            **{**base.__dict__,
+               "frac_optimized": 0.0,
+               "g_clone_sd": 0.60,
+               "k_decay_sd": 0.35,
+               "platform_stress_relief": 0.05,
+               "cn_sigma": 0.45,
+               "cn_effect_P": 0.18,
+               "cn_penalty_S": 0.06,
+               "cn_penalty_Q": 0.04,
+               "optimized_decay_mult": 1.0,
+               "optimized_cn_effect_mult": 1.0,
+            })
+    elif scenario == "optimized":
+        return Config(
+            **{**base.__dict__,
+               "frac_optimized": 1.0,
+               "g_clone_sd": 0.15,
+               "k_decay_sd": 0.15,
+               "platform_stress_relief": 0.20,
+               "cn_sigma": 0.25,
+               "cn_effect_P": 0.22,
+               "cn_penalty_S": 0.03,
+               "cn_penalty_Q": 0.02,
+               "optimized_decay_mult": 0.65,
+               "optimized_cn_effect_mult": 1.25,
+            })
+    else:
+        raise ValueError("scenario must be 'legacy' or 'optimized'")
 
 #-----------------------------------------
 # Main synthetic data generation function
 #-----------------------------------------
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate synthetic CLD dataset.")
+    parser.add_argument("--scenario", type=str, default="legacy", choices=["legacy", "optimized"], help="Which scenario configuration to use (legacy, optimized)")
+    args = parser.parse_args()
+
+    global config
+    config = apply_scenario(config, args.scenario)
+
     np.random.seed(config.seed)
 
     # Repo paths
@@ -182,7 +239,7 @@ def main() -> None:
     schema_path = root / "data" / "schema" / "cld_schema.sql"
     out_dir = root / "data" / "synthetic" / "raw"
     out_dir.mkdir(parents=True, exist_ok=True)
-    db_path = out_dir / f"cld_{config.n_clones}clones.db"
+    db_path = out_dir / f"cld_{config.n_clones}clones_{args.scenario}.db"
 
     # Ensure fresh DB
     ensure_fresh_db(db_path)
@@ -260,7 +317,7 @@ def main() -> None:
     
     # Store batch effects truths for validation
     pd.DataFrame([{"batch_id": k, **v} for k, v in batch_effects.items()]).to_csv(
-        out_dir / f"batch_effects_truths_{config.n_clones}.csv", index=False)
+        out_dir / f"batch_effects_truths_{config.n_clones}_{args.scenario}.csv", index=False)
     
     # --------------------------------------
     # Step 1 : Generate clones + latent truth (Productivity, Stability, Quality)
@@ -289,13 +346,24 @@ def main() -> None:
         np.random.normal(loc = config.mu_quality_potential, scale = config.sigma_quality_potential, size=config.n_clones),
         0.0, 1.0)
     
-    # Platform factor: project-level + clonal residual
+    # Platform factor: scenario group (legacy vs optimized) + clone residual
+    # - is_opt: 1 if clone is on optimized platform, else 0
+    # - G_base: baseline platform quality for each clone based on scenario group
     if config.enable_platform:
+        if config.enable_platform_groups:    
+            is_opt = (np.random.rand(config.n_clones) < config.frac_optimized).astype(int)
+            G_base = np.where(is_opt == 1, config.G_optimized, config.G_legacy)
+        else:
+            is_opt = np.zeros(config.n_clones, dtype=int)
+            G_base = np.full(config.n_clones, config.G_project)
+        
         g_clone = np.random.normal(0.0, config.g_clone_sd, size=config.n_clones)
-        G = np.clip(config.G_project + g_clone, -2.0, 2.0) # keep bounded before sigmoid-like transform
-        G = 1.0 / (1.0 + np.exp(-G))  # sigmoid transform to [0, 1]
+        G_raw = np.clip(G_base + g_clone, -2.0, 2.0)  # prevent extreme values
+        G = 1.0 / (1.0 + np.exp(-G_raw))  # sigmoid to bound between 0 and 1
     else:
-        G = np.full(config.n_clones, 0.5)  # Neutral effect
+        is_opt = np.zeros(config.n_clones, dtype=int)
+        G = np.full(config.n_clones, 0.5) # no platform effect
+
 
     # Copy number (true + observed ddPCR)
     if config.enable_copy_number:
@@ -309,8 +377,13 @@ def main() -> None:
     # Apply platform/copy-number effects to P/S/Q
     # - CN increases productivity (dimisnihing returns)
     # - CN slightly penalizes stability and quality (expression burden)
+    # CN effect can be stronger on optimized platform (better expression machinery / integration design)
+    if config.enable_platform and config.enable_platform_groups:
+        cn_mult = np.where(is_opt == 1, config.optimized_cn_effect_mult, 1.0)
+    else:
+        cn_mult = 1.0
 
-    P = P_base * np.exp(config.platform_strength_P * (G - 0.5)) * np.exp(config.cn_effect_P * np.log1p(CN_true))
+    P = P_base * np.exp(config.platform_strength_P * (G - 0.5)) * np.exp((config.cn_effect_P * cn_mult) * np.log1p(CN_true))
     S = np.clip(S_base + config.platform_strength_S * (G - 0.5) - config.cn_penalty_S * np.log1p(CN_true), 0.0, 1.0)
     Q = np.clip(Q_base + config.platform_strength_Q * (G - 0.5) - config.cn_penalty_Q * np.log1p(CN_true), 0.0, 1.0)
 
@@ -319,6 +392,10 @@ def main() -> None:
         k_decay_i = config.k_decay * np.exp(np.random.normal(0.0, config.k_decay_sd, size=config.n_clones))
     else:
         k_decay_i = np.full(config.n_clones, config.k_decay)
+
+    # Optimized platform reduces silencing/decay speed (better epigenetic stability)
+    if config.enable_platform and config.enable_platform_groups:
+        k_decay_i = np.where(is_opt == 1, k_decay_i * config.platform_decay_mult, k_decay_i)
 
     productivities = P
     stabilities = S
@@ -330,13 +407,14 @@ def main() -> None:
         "stability": stabilities,
         "quality_potential": quality_potentials,
         "G_platform": G,
+        "platform_group": is_opt, # 0 = legacy, 1 = optimized
         "CN_true": CN_true,
         "CN_obs": CN_obs,
         "k_decay_i": k_decay_i,
     })
     
     
-    latents.to_csv(out_dir / f"clone_latent_truths_{config.n_clones}.csv", index=False)
+    latents.to_csv(out_dir / f"clone_latent_truths_{config.n_clones}_{args.scenario}.csv", index=False)
 
     # Lookup maps for fast access inside passage loop
     cn_obs_by_clone = dict(zip(latents["clone_id"], latents["CN_obs"]))
