@@ -216,7 +216,7 @@ Enrichment improvement under uncertainty.
 Ongoing work:
 ```
 	•	Improve early → late signal strength
-	•	Platform scenario calibration
+	•	Platform scenario (traditional (random integration) vs optimized (targeted insertion) calibration)
 	•	Advanced ranking metrics
 ```
 ---
