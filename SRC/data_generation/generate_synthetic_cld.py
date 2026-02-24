@@ -395,7 +395,7 @@ def main() -> None:
 
     # Optimized platform reduces silencing/decay speed (better epigenetic stability)
     if config.enable_platform and config.enable_platform_groups:
-        k_decay_i = np.where(is_opt == 1, k_decay_i * config.platform_decay_mult, k_decay_i)
+        k_decay_i = np.where(is_opt == 1, k_decay_i * config.optimized_decay_mult, k_decay_i)
 
     productivities = P
     stabilities = S
