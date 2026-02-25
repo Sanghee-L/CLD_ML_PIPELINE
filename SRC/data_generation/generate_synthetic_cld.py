@@ -106,6 +106,26 @@ class Config:
     optimized_cn_effect_mult: float = 1.25 # optimized platform increases CN effect on productivity by this factor (e.g., better expression machinery can better leverage higher CN)
 
     # --------------------------------------
+    # Legacy jackpot subpopulation (two-track)
+    # ----------------------------------------
+    # Track A: "super jackpot" (very rare, high P + high S + low decay) -> biosimilar-style strategy
+    # Track B: "aggressive jackpot" (rare, high P but slightly unstable) -> nobel mAb/ ADC strategy
+
+    enable_jackpot_cluster: bool = True
+    
+    # Super jackpot (very rare, high P + high S + low decay)
+    super_frac: float = 0.01
+    super_P_mult: float = 2.5
+    super_S_add: float = 0.20
+    super_decay_mult: float = 0.5
+
+    # Aggressive jackpot (rare, high P but slightly unstable)
+    aggressive_frac: float = 0.03
+    aggressive_P_mult: float = 2.0
+    aggressive_S_add: float = -0.05
+    aggressive_decay_mult: float = 1.05
+
+    # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
     # --------------------------------------
 
@@ -202,6 +222,7 @@ def apply_scenario(base: Config, scenario: str) -> Config:
                "cn_penalty_Q": 0.04,
                "optimized_decay_mult": 1.0,
                "optimized_cn_effect_mult": 1.0,
+               "enable_jackpot_cluster": True,
             })
     elif scenario == "optimized":
         return Config(
@@ -216,6 +237,7 @@ def apply_scenario(base: Config, scenario: str) -> Config:
                "cn_penalty_Q": 0.02,
                "optimized_decay_mult": 0.65,
                "optimized_cn_effect_mult": 1.25,
+               "enable_jackpot_cluster": False,
             })
     else:
         raise ValueError("scenario must be 'legacy' or 'optimized'")
@@ -393,7 +415,36 @@ def main() -> None:
     else:
         k_decay_i = np.full(config.n_clones, config.k_decay)
 
+    # ------------------------------
+    # Legacy jackpot subpopulation (two-track, disjoint)
+    # - Super jackpot: very rare, high P + high S + low decay
+    # - Aggressive jackpot: rare, high P but slightly unstable (lower S and/or faster decay)
+    # ------------------------------
+
+    if config.enable_jackpot_cluster and args.scenario == "legacy":
+        rng = np.random.default_rng(config.seed + 123)
+
+        # Disjoint assignment: sample super first, then aggressive from the remaining pool
+        is_super = (rng.random(config.n_clones) < config.super_frac)
+        remaining = ~is_super
+        is_aggr = (rng.random(config.n_clones) < config.aggressive_frac) & remaining
+
+        # Apply super jackpot effects
+        P = np.where(is_super, P * config.super_P_mult, P)
+        S = np.clip(S + is_super.astype(float) * config.super_S_add, 0.0, 1.0)
+        k_decay_i = np.where(is_super, k_decay_i * config.super_decay_mult, k_decay_i)
+
+        # Apply aggressive jackpot effects
+        P = np.where(is_aggr, P * config.aggressive_P_mult, P)
+        S = np.clip(S + is_aggr.astype(float) * config.aggressive_S_add, 0.0, 1.0)
+        k_decay_i = np.where(is_aggr, k_decay_i * config.aggressive_decay_mult, k_decay_i)
+
+    else:
+        is_super = np.zeros(config.n_clones, dtype=bool)
+        is_aggr = np.zeros(config.n_clones, dtype=bool)
+
     # Optimized platform reduces silencing/decay speed (better epigenetic stability)
+    # We can apply this reduction to all clones if enable_platform_groups is False (i.e., all clones on optimized platform), or only to the fraction of clones on optimized platform if grouping is enabled.
     if config.enable_platform and config.enable_platform_groups:
         k_decay_i = np.where(is_opt == 1, k_decay_i * config.optimized_decay_mult, k_decay_i)
 
@@ -411,6 +462,8 @@ def main() -> None:
         "CN_true": CN_true,
         "CN_obs": CN_obs,
         "k_decay_i": k_decay_i,
+        "is_super": is_super.astype(int),
+        "is_aggressive": is_aggr.astype(int),
     })
     
     
