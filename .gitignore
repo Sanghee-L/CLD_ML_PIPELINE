@@ -1,0 +1,4 @@
+# Generated synthetic outputs (large)
+data/synthetic/raw/*.db
+data/synthetic/raw/*.csv
+data/synthetic/processed/*.csv
