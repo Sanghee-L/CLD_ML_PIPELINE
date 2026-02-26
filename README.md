@@ -6,7 +6,7 @@ Simulation-driven clone selection framework for Cell Line Development (CLD)
 
 ## 🚀 Vision
 
-Cell Line Development (CLD) is one of the most time- and cost-intensive stages in biologics manufacturing.
+Cell Line Development (CLD) is one of the most time and cost-intensive stages in biologics manufacturing.
 
 While AI has advanced drug discovery, predictive modeling for **biomanufacturing platforms** remains underdeveloped.
 
