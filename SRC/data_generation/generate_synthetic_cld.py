@@ -41,7 +41,7 @@ class Config:
     seed : int = 42
 
     # Dataset sizes
-    n_clones : int = 2000
+    n_clones : int = 5000
     n_passages : int = 30
 
     # Phase labeling (to prevent ML leakage)
@@ -114,16 +114,16 @@ class Config:
     enable_jackpot_cluster: bool = True
     
     # Super jackpot (very rare, high P + high S + low decay)
-    super_frac: float = 0.01
-    super_P_mult: float = 2.5
-    super_S_add: float = 0.20
-    super_decay_mult: float = 0.5
+    super_frac: float = 0.015
+    super_P_mult: float = 3.0
+    super_S_add: float = 0.25
+    super_decay_mult: float = 0.40
 
     # Aggressive jackpot (rare, high P but slightly unstable)
-    aggressive_frac: float = 0.03
-    aggressive_P_mult: float = 2.0
-    aggressive_S_add: float = -0.05
-    aggressive_decay_mult: float = 1.05
+    aggressive_frac: float = 0.035
+    aggressive_P_mult: float = 1.8
+    aggressive_S_add: float = 0.20
+    aggressive_decay_mult: float = 1.3
 
     # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
