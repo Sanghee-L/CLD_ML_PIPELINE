@@ -122,8 +122,29 @@ class Config:
     # Aggressive jackpot (rare, high P but slightly unstable)
     aggressive_frac: float = 0.035
     aggressive_P_mult: float = 1.8
-    aggressive_S_add: float = 0.20
-    aggressive_decay_mult: float = 1.3
+    aggressive_S_add: float = -0.05
+    aggressive_decay_mult: float = 1.10
+
+    # --------------------------------------
+    # Phenotype coupling knobs (make early signals more learnable)
+    # --------------------------------------
+
+    # Super clone : stronger and cleaner phenotype
+    super_early_titer_mult: float = 1.10
+    super_late_titer_mult: float = 1.08
+    super_burden_relief: float = 0.15 # super clones have less burden, so smaller VCD penalty and better viability
+    super_extra_stress_relief: float = 0.08 # super clones have better folding/secretion, so less stress and better quality
+    super_agg_shift: float = -0.15 # super clones have better quality, so lower aggregation
+
+    # Aggressive clone : looks good early, then loses productivity stability
+    aggressive_early_titer_mult: float = 1.12
+    aggressive_early_fade: float = 0.015 # additional productivity decay per passage for aggressive clones
+    aggressive_instability_start: int = 7 # passage at which aggressive clones start to become unstable
+    aggressive_late_extra_decay: float = 0.06 # aggressive clones have faster decay starting mid-passage, so they lose more productivity late
+    aggressive_burden_relief: float = 0.10 # aggressive clones have more burden relief as they lose productivity
+    aggressive_extra_stress: float = 0.015 # aggressive clones have more expression stress, so slightly worse quality
+    aggressive_agg_shift: float = 0.10 # aggressive clones have worse quality, so higher aggregation
+    aggressive_agg_noise_mult: float = 1.50 # aggressive clones have more heterogeneous quality, so higher aggregation noise
 
     # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
@@ -541,28 +562,85 @@ def main() -> None:
             # This is the key CLD phenomenon
             # unstable clones (low S) lose expression across passages
 
-            # Clone-specific decay sensitivity (k_decay_i) makes decay speed heterogenous across clones
+            # ----------------------------------------------
+            # Group-specific phenotype coupling
+            # ----------------------------------------------
+
+            is_super_clone = bool(row["is_super"])
+            is_aggr_clone = bool(row["is_aggressive"])
+
+            # Base productivity trajectory from latent productivity and stability
             k_i = kdecay_by_clone[cid]
             P_ip = row["productivity"] * np.exp(-k_i * (1 - row["stability"]) * p)
 
-            # Expression burden depends on current productivity (P_ip)
+            # Default modifiers
+            titer_mult = 1.0
+            growth_burden_mult = 1.0
+            extra_stress = 0.0
+            agg_shift = 0.0
+            agg_noise_sd = config.aggregation_noise_sd
+
+            # ---- Super clone : good early signal + sustained late performance ----
+            if is_super_clone:
+                if p <= config.early_max:
+                    titer_mult *= config.super_early_titer_mult
+                else:
+                    titer_mult *= config.super_late_titer_mult
+
+                # keep growth/viability reasonably normal despite high production
+                growth_burden_mult *= (1.0 - config.super_burden_relief)
+
+                # slightly cleaner/less stressed phenotype
+                extra_stress -= config.super_extra_stress_relief
+                agg_shift += config.super_agg_shift
+            
+            # ---- Aggressive clone : looks good early, then collapse productivity stability ----
+            elif is_aggr_clone:
+                # Early phase: looks attractive in titer / qP
+                if p <= config.early_max:
+                    early_steps = max(0, p - config.stability_early_start)
+                    fade = max(0.85, 1.0 - config.aggressive_early_fade * early_steps)
+                    titer_mult *= config.aggressive_early_titer_mult * fade
+                
+                # Late phase: hidden instability becomes visible
+                if p >= config.aggressive_instability_start:
+                    late_steps = p - config.aggressive_instability_start + 1
+                    P_ip *= np.exp(-config.aggressive_late_extra_decay * late_steps)
+                
+                # Keep VCD/viability mostly normal
+                growth_burden_mult *= (1.0 - config.aggressive_burden_relief)
+
+                # Quality is only weakly affected, mostly via noise
+                extra_stress += config.aggressive_extra_stress
+                agg_shift += config.aggressive_agg_shift
+                agg_noise_sd *= config.aggressive_agg_noise_mult
+            
+            # Expression burden depends on current effective productivity
             expr_burden = (P_ip / mean_P)
 
-            # A mild "environment stress" increases slightly with passage,
-            # while expression stress depends on current burden
-            stress = (config.stress_base + 
-                      config.env_stress_slope * p +
-                      config.expr_stress * expr_burden)
-            
-            # Platform can reduce stress slightly (better folding/secretion robustness)
+            # Growth/viability use a "relieved" burden so aggressive clones 
+            # do not look obviously worse in VCD / viability
+            effective_growth_burden = expr_burden * growth_burden_mult
+
+            # Base stress
+            stress = (
+                config.stress_base 
+                + config.env_stress_slope * p
+                + config.expr_stress * expr_burden
+                + extra_stress
+            )
+
+            # Platform effect on stress
             if config.enable_platform:
                 factor = 1.0 - config.platform_stress_relief * (g_by_clone[cid] - 0.5)
                 factor = np.clip(factor, 0.8, 1.2)  # prevent extreme relief
                 stress *= factor
 
-            
+            # Perfusion slightly reduces stress
             if mode == "perfusion":
-                stress *= 0.9  # Perfusion reduces stress slightly
+                stress *= 0.9
+
+            stress = max(0.0, stress) # prevent negative stress
             
             # Batch ID per passage
             batch_id = f"B_P{p:02d}"
@@ -573,25 +651,23 @@ def main() -> None:
             # --------------------------------
 
             # Titer depends on effective productivity + noise + batch effect
-            titer_true = config.alpha_titer * P_ip
+            titer_true = config.alpha_titer * P_ip * titer_mult
             titer = max(0.0, titer_true
                          + np.random.normal(0, config.titer_noise_sd) + be["titer"])
             
-            # VCD: increases with passage (adaptation)
-            # As P_ip decays, burden decreases, so VCD can recover later
+            # VCD: adaptation improves over passage, but growth burden is only mildly affected
             adaptation_factor = (1.0 + config.adapt_vcd * np.log1p(p))
-            burden_factor = np.exp(-config.burden_coeff * expr_burden) # higher burden -> smaller VCD
+            burden_factor = np.exp(-config.burden_coeff * effective_growth_burden) # higher burden -> smaller VCD
             vcd_true = config.base_vcd * adaptation_factor * burden_factor
             vcd = max(0.0, vcd_true + np.random.normal(0, config.vcd_noise_sd) + be["vcd"])
 
-            # Viability: tends to improve with passage adaptation
-            # and improves when burden decreases (P_pi decays)
-            viab_true = 95.0 + config.adapt_viab * np.log1p(p) - 2.0 * expr_burden
+            # Viability: largenly maintained, only weakly burden-sensitive
+            viab_true = 95.0 + config.adapt_viab * np.log1p(p) - 2.0 * effective_growth_burden
             viability = float(np.clip(viab_true + np.random.normal(0, config.viability_noise_sd) + be["viability"], 0.0, 100.0))
 
-            # Quality proxy (aggregation): worse when intrinsic quality is low (1 - Q))
-            agg_true = (config.gamma_agg_intrinsic * (1 - row["quality_potential"]) + config.delta_agg_stress * stress)
-            aggregation = float(np.clip(agg_true + np.random.normal(0, config.aggregation_noise_sd)+ be["aggregation"], 0.0, 100.0))
+            # Aggregation: weak clone effect + stress + noise
+            agg_true = (config.gamma_agg_intrinsic * (1 - row["quality_potential"]) + config.delta_agg_stress * stress + agg_shift)
+            aggregation = float(np.clip(agg_true + np.random.normal(0, agg_noise_sd)+ be["aggregation"], 0.0, 100.0))
 
             # Store assay result row
             assay_result_rows.extend([
