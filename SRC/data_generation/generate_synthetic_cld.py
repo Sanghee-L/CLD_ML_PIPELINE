@@ -147,6 +147,30 @@ class Config:
     aggressive_agg_noise_mult: float = 1.50 # aggressive clones have more heterogeneous quality, so higher aggregation noise
 
     # --------------------------------------
+    # Optimized residual-failure knobs
+    # --------------------------------------
+
+    # Even in optimized platforms, a very small residual subgroup can remain:
+    # clones that look fine early but lose performance later due to product/cassete-specific effects
+    optimized_residual_aggressive_frac: float = 0.01
+
+    # Mild early boost so they can look competitive in early screening
+    optimized_residual_early_titer_mult: float = 1.05
+
+    # Late-emerging instability starts later and is milder than legacy aggressive
+    optimized_residual_instability_start: int = 9
+    optimized_residual_late_extra_decay: float = 0.03
+
+    # Aggregation impact in weak, mostly stochastic / hidden
+    optimized_residual_agg_shift: float = 0.08
+    optimized_residual_agg_noise_mult: float = 1.30
+
+    # Hidden late-only clone factors:
+    # Not directly visible in early features, used to reduce overly perfect prediction
+    optimized_hidden_titer_sd: float = 0.08
+    optimized_hidden_agg_sd: float = 0.20
+
+    # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
     # --------------------------------------
 
@@ -442,23 +466,44 @@ def main() -> None:
     # - Aggressive jackpot: rare, high P but slightly unstable (lower S and/or faster decay)
     # ------------------------------
 
-    if config.enable_jackpot_cluster and args.scenario == "legacy":
-        rng = np.random.default_rng(config.seed + 123)
+    # ------------------------------
+    # Subgroup assignment
+    # - legacy: super + aggressive
+    # - optimized: no super jackpot, but allow a very small residual aggressive subgroup
+    # ------------------------------
 
-        # Disjoint assignment: sample super first, then aggressive from the remaining pool
+    rng = np.random.default_rng(config.seed + 123)
+
+    if args.scenario == "legacy" and config.enable_jackpot_cluster:
+
+        # Disjoint assignment: sample super first, then aggressive from remaining pool
         is_super = (rng.random(config.n_clones) < config.super_frac)
         remaining = ~is_super
         is_aggr = (rng.random(config.n_clones) < config.aggressive_frac) & remaining
 
         # Apply super jackpot effects
         P = np.where(is_super, P * config.super_P_mult, P)
-        S = np.clip(S + is_super.astype(float) * config.super_S_add, 0.0, 1.0)
+        S = np.clip(S + is_super.astype(float) * config.super_S_add, 0.1, 1.0)
         k_decay_i = np.where(is_super, k_decay_i * config.super_decay_mult, k_decay_i)
 
         # Apply aggressive jackpot effects
         P = np.where(is_aggr, P * config.aggressive_P_mult, P)
         S = np.clip(S + is_aggr.astype(float) * config.aggressive_S_add, 0.0, 1.0)
         k_decay_i = np.where(is_aggr, k_decay_i * config.aggressive_decay_mult, k_decay_i)
+    
+    elif args.scenario == "optimized":
+
+        # No rare "super jackpot" in optimized:
+        # the whole platform distribution is already shifted toward better/stable behavior
+        is_super = np.zeros(config.n_clones, dtype=bool)
+
+        # But allow a very small residual aggressive subgroup
+        is_aggr = (rng.random(config.n_clones) < config.optimized_residual_aggressive_frac)
+
+        # Make them only mildly attractive early and slightly less stable late
+        P = np.where(is_aggr, P * 1.10, P)
+        S = np.clip(S + is_aggr.astype(float) * (-0.02), 0.0, 1.0)
+        k_decay_i = np.where(is_aggr, k_decay_i * 1.08, k_decay_i)
 
     else:
         is_super = np.zeros(config.n_clones, dtype=bool)
@@ -473,6 +518,20 @@ def main() -> None:
     stabilities = S
     quality_potentials = Q
 
+    # Hidden late-only clone factors
+    # These are not directly visible from early observed features
+    # and make optimized late outcomes less perfectly predictions.
+    if args.scenario == "optimized":
+        hidden_titer_late = np.random.normal(
+            0.0, config.optimized_hidden_titer_sd, size = config.n_clones
+        )
+        hidden_agg_late = np.random.normal(
+            0.0, config.optimized_hidden_agg_sd, size = config.n_clones
+        )
+    else:
+        hidden_titer_late = np.zeros(config.n_clones)
+        hidden_agg_late = np.zeros(config.n_clones)
+
     latents = pd.DataFrame({
         "clone_id": clone_ids,
         "productivity": productivities,
@@ -485,6 +544,8 @@ def main() -> None:
         "k_decay_i": k_decay_i,
         "is_super": is_super.astype(int),
         "is_aggressive": is_aggr.astype(int),
+        "hidden_titer_late": hidden_titer_late,
+        "hidden_agg_late": hidden_agg_late,
     })
     
     
@@ -494,6 +555,8 @@ def main() -> None:
     cn_obs_by_clone = dict(zip(latents["clone_id"], latents["CN_obs"]))
     kdecay_by_clone = dict(zip(latents["clone_id"], latents["k_decay_i"]))
     g_by_clone = dict(zip(latents["clone_id"], latents["G_platform"]))
+    hidden_titer_by_clone = dict(zip(latents["clone_id"], latents["hidden_titer_late"]))
+    hidden_agg_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_late"]))
 
     pd.DataFrame({
         "clone_id": clone_ids,
@@ -596,24 +659,43 @@ def main() -> None:
             
             # ---- Aggressive clone : looks good early, then collapse productivity stability ----
             elif is_aggr_clone:
-                # Early phase: looks attractive in titer / qP
-                if p <= config.early_max:
-                    early_steps = max(0, p - config.stability_early_start)
-                    fade = max(0.85, 1.0 - config.aggressive_early_fade * early_steps)
-                    titer_mult *= config.aggressive_early_titer_mult * fade
-                
-                # Late phase: hidden instability becomes visible
-                if p >= config.aggressive_instability_start:
-                    late_steps = p - config.aggressive_instability_start + 1
-                    P_ip *= np.exp(-config.aggressive_late_extra_decay * late_steps)
-                
-                # Keep VCD/viability mostly normal
-                growth_burden_mult *= (1.0 - config.aggressive_burden_relief)
+                if args.scenario == "legacy":
+                    # Early phase: looks attractive in titer / qP
+                    if p <= config.early_max:
+                        early_steps = max(0, p - config.stability_early_start)
+                        fade = max(0.85, 1.0 - config.aggressive_early_fade * early_steps)
+                        titer_mult *= config.aggressive_early_titer_mult * fade
+                    
+                    # Late phase: hidden instability becomes visible
+                    if p >= config.aggressive_instability_start:
+                        late_steps = p - config.aggressive_instability_start + 1
+                        P_ip *= np.exp(-config.aggressive_late_extra_decay * late_steps)
+                    
+                    # Keep VCD/viability mostly normal
+                    growth_burden_mult *= (1.0 - config.aggressive_burden_relief)
 
-                # Quality is only weakly affected, mostly via noise
-                extra_stress += config.aggressive_extra_stress
-                agg_shift += config.aggressive_agg_shift
-                agg_noise_sd *= config.aggressive_agg_noise_mult
+                    # Quality is only weakly affected, mostly via noise
+                    extra_stress += config.aggressive_extra_stress
+                    agg_shift += config.aggressive_agg_shift
+                    agg_noise_sd *= config.aggressive_agg_noise_mult
+                
+                elif args.scenario == "optimized":
+
+                    # Residual aggressive clones in optimized world:
+                    # only mildly attractive early, with subtler late failure
+                    if p <= config.early_max:
+                        titer_mult *= config.optimized_residual_early_titer_mult
+
+                    if p >= config.optimized_residual_instability_start:
+                        late_steps = p - config.optimized_residual_instability_start + 1
+                        P_ip *= np.exp(-config.optimized_residual_late_extra_decay * late_steps)
+
+                    # VCD/viability mostly unaffected
+                    growth_burden_mult *= 0.97
+
+                    # aggregation mostly affected through weak shift + larger noise
+                    agg_shift += config.optimized_residual_agg_shift
+                    agg_noise_sd *= config.optimized_residual_agg_noise_mult
             
             # Expression burden depends on current effective productivity
             expr_burden = (P_ip / mean_P)
@@ -651,7 +733,11 @@ def main() -> None:
             # --------------------------------
 
             # Titer depends on effective productivity + noise + batch effect
-            titer_true = config.alpha_titer * P_ip * titer_mult
+            late_titer_factor = 1.0
+            if p >= config.late_min:
+                late_titer_factor *= np.exp(hidden_titer_by_clone[cid])
+            
+            titer_true = config.alpha_titer * P_ip * titer_mult * late_titer_factor
             titer = max(0.0, titer_true
                          + np.random.normal(0, config.titer_noise_sd) + be["titer"])
             
@@ -666,7 +752,16 @@ def main() -> None:
             viability = float(np.clip(viab_true + np.random.normal(0, config.viability_noise_sd) + be["viability"], 0.0, 100.0))
 
             # Aggregation: weak clone effect + stress + noise
-            agg_true = (config.gamma_agg_intrinsic * (1 - row["quality_potential"]) + config.delta_agg_stress * stress + agg_shift)
+            late_agg_shift = 0.0
+            if p >= config.late_min:
+                late_agg_shift += hidden_agg_by_clone[cid]
+
+            agg_true = (
+                config.gamma_agg_intrinsic * (1 - row["quality_potential"]) 
+                + config.delta_agg_stress * stress 
+                + agg_shift
+                + late_agg_shift
+                )
             aggregation = float(np.clip(agg_true + np.random.normal(0, agg_noise_sd)+ be["aggregation"], 0.0, 100.0))
 
             # Store assay result row
