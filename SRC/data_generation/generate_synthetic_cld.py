@@ -151,7 +151,7 @@ class Config:
     # --------------------------------------
 
     # Even in optimized platforms, a very small residual subgroup can remain:
-    # clones that look fine early but lose performance later due to product/cassete-specific effects
+    # clones that look fine early but lose performance later due to product/cassette-specific effects
     optimized_residual_aggressive_frac: float = 0.01
 
     # Mild early boost so they can look competitive in early screening
@@ -161,7 +161,7 @@ class Config:
     optimized_residual_instability_start: int = 9
     optimized_residual_late_extra_decay: float = 0.03
 
-    # Aggregation impact in weak, mostly stochastic / hidden
+    # Aggregation impact is weak, mostly stochastic / hidden
     optimized_residual_agg_shift: float = 0.08
     optimized_residual_agg_noise_mult: float = 1.30
 
@@ -461,12 +461,6 @@ def main() -> None:
         k_decay_i = np.full(config.n_clones, config.k_decay)
 
     # ------------------------------
-    # Legacy jackpot subpopulation (two-track, disjoint)
-    # - Super jackpot: very rare, high P + high S + low decay
-    # - Aggressive jackpot: rare, high P but slightly unstable (lower S and/or faster decay)
-    # ------------------------------
-
-    # ------------------------------
     # Subgroup assignment
     # - legacy: super + aggressive
     # - optimized: no super jackpot, but allow a very small residual aggressive subgroup
@@ -483,7 +477,7 @@ def main() -> None:
 
         # Apply super jackpot effects
         P = np.where(is_super, P * config.super_P_mult, P)
-        S = np.clip(S + is_super.astype(float) * config.super_S_add, 0.1, 1.0)
+        S = np.clip(S + is_super.astype(float) * config.super_S_add, 0.0, 1.0)
         k_decay_i = np.where(is_super, k_decay_i * config.super_decay_mult, k_decay_i)
 
         # Apply aggressive jackpot effects
@@ -501,7 +495,7 @@ def main() -> None:
         is_aggr = (rng.random(config.n_clones) < config.optimized_residual_aggressive_frac)
 
         # Make them only mildly attractive early and slightly less stable late
-        P = np.where(is_aggr, P * 1.10, P)
+        P = np.where(is_aggr, P * 1.05, P)
         S = np.clip(S + is_aggr.astype(float) * (-0.02), 0.0, 1.0)
         k_decay_i = np.where(is_aggr, k_decay_i * 1.08, k_decay_i)
 
@@ -520,7 +514,7 @@ def main() -> None:
 
     # Hidden late-only clone factors
     # These are not directly visible from early observed features
-    # and make optimized late outcomes less perfectly predictions.
+    # and make optimized late outcomes less perfectly predictabe.
     if args.scenario == "optimized":
         hidden_titer_late = np.random.normal(
             0.0, config.optimized_hidden_titer_sd, size = config.n_clones
