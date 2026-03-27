@@ -163,12 +163,16 @@ class Config:
 
     # Aggregation impact is weak, mostly stochastic / hidden
     optimized_residual_agg_shift: float = 0.08
-    optimized_residual_agg_noise_mult: float = 1.30
+    optimized_residual_agg_noise_mult: float = 1.80
 
     # Hidden late-only clone factors:
     # Not directly visible in early features, used to reduce overly perfect prediction
-    optimized_hidden_titer_sd: float = 0.08
-    optimized_hidden_agg_sd: float = 0.20
+    optimized_hidden_titer_sd: float = 0.14
+    optimized_hidden_agg_sd: float = 0.80
+
+    # Additional late-only stochastic process noise in optimized world
+    optimized_late_titer_noise_sd: float = 0.18
+    optimized_late_agg_noise_Sd: float = 0.70
 
     # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
@@ -522,9 +526,19 @@ def main() -> None:
         hidden_agg_late = np.random.normal(
             0.0, config.optimized_hidden_agg_sd, size = config.n_clones
         )
+
+        # Late-only clone-level stochastic process effects
+        hidden_titer_process = np.random.normal(
+            0.0, config.optimized_late_titer_noise_sd, size = config.n_clones
+        )
+        hidden_agg_process = np.random.normal(
+            0.0, config.optimized_late_agg_noise_Sd, size = config.n_clones
+        )
     else:
         hidden_titer_late = np.zeros(config.n_clones)
         hidden_agg_late = np.zeros(config.n_clones)
+        hidden_titer_process = np.zeros(config.n_clones)
+        hidden_agg_process = np.zeros(config.n_clones)
 
     latents = pd.DataFrame({
         "clone_id": clone_ids,
@@ -540,6 +554,9 @@ def main() -> None:
         "is_aggressive": is_aggr.astype(int),
         "hidden_titer_late": hidden_titer_late,
         "hidden_agg_late": hidden_agg_late,
+        "hidden_titer_process": hidden_titer_process,
+        "hidden_agg_process": hidden_agg_process
+
     })
     
     
@@ -551,6 +568,8 @@ def main() -> None:
     g_by_clone = dict(zip(latents["clone_id"], latents["G_platform"]))
     hidden_titer_by_clone = dict(zip(latents["clone_id"], latents["hidden_titer_late"]))
     hidden_agg_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_late"]))
+    hidden_titer_process_by_clone = dict(zip(latents["clone_id"], latents["hidden_titer_process"]))
+    hidden_agg_process_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_process"]))
 
     pd.DataFrame({
         "clone_id": clone_ids,
@@ -728,10 +747,14 @@ def main() -> None:
 
             # Titer depends on effective productivity + noise + batch effect
             late_titer_factor = 1.0
+            late_titer_additive = 0.0
             if p >= config.late_min:
                 late_titer_factor *= np.exp(hidden_titer_by_clone[cid])
+                late_titer_additive += hidden_titer_process_by_clone[cid]
             
-            titer_true = config.alpha_titer * P_ip * titer_mult * late_titer_factor
+            titer_true = (
+                config.alpha_titer * P_ip * titer_mult * late_titer_factor
+                + late_titer_additive)
             titer = max(0.0, titer_true
                          + np.random.normal(0, config.titer_noise_sd) + be["titer"])
             
@@ -747,8 +770,10 @@ def main() -> None:
 
             # Aggregation: weak clone effect + stress + noise
             late_agg_shift = 0.0
+            extra_agg_noise_sd = 0.0
             if p >= config.late_min:
                 late_agg_shift += hidden_agg_by_clone[cid]
+                extra_agg_noise_sd += abs(hidden_agg_process_by_clone[cid])
 
             agg_true = (
                 config.gamma_agg_intrinsic * (1 - row["quality_potential"]) 
@@ -756,7 +781,12 @@ def main() -> None:
                 + agg_shift
                 + late_agg_shift
                 )
-            aggregation = float(np.clip(agg_true + np.random.normal(0, agg_noise_sd)+ be["aggregation"], 0.0, 100.0))
+            aggregation = float(np.clip(
+                agg_true + np.random.normal(0, agg_noise_sd + extra_agg_noise_sd) 
+                + be["aggregation"], 
+                0.0, 
+                100.0)
+                )
 
             # Store assay result row
             assay_result_rows.extend([
