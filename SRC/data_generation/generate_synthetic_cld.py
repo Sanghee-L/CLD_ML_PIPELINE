@@ -714,7 +714,7 @@ def main() -> None:
 
                     if p >= config.late_min:
                         agg_shift += 0.5 * config.optimized_residual_agg_shift
-                        agg_noise_sd *= 1.0 + 0,5 * (config.optimized_residual_agg_noise_mult - 1.0)
+                        agg_noise_sd *= 1.0 + 0.5 * (config.optimized_residual_agg_noise_mult - 1.0)
             
             # Expression burden depends on current effective productivity
             expr_burden = (P_ip / mean_P)

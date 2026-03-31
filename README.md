@@ -1,229 +1,233 @@
-# CLD-ML-Pipeline
+# 📦 CLD ML Pipeline
 
-Simulation-driven clone selection framework for Cell Line Development (CLD)
+## 🧬 Overview
 
----
+This project simulates a realistic **Cell Line Development (CLD)** workflow and builds machine learning models to:
 
-## 🚀 Vision
+- Predict **late-stage clone performance** from early screening data
+- Optimize **clone selection strategies** under different business objectives
+- Compare **legacy vs optimized platform behavior**
+- Provide a sandbox for testing **next-gen interventions** (e.g., CRISPR, multi-omics)
 
-Cell Line Development (CLD) is one of the most time and cost-intensive stages in biologics manufacturing.
+The pipeline includes:
 
-While AI has advanced drug discovery, predictive modeling for **biomanufacturing platforms** remains underdeveloped.
-
-This project aims to build a **Simulation-Driven Laboratory (SDL) framework for CLD**, enabling:
-
-- Early-stage clone ranking  
-- Late-stage outcome prediction  
-- Multi-objective decision modeling  
-- Platform engineering scenario simulation  
-
-The long-term goal is to reduce CLD time, cost, and experimental burden using predictive modeling.
+- Synthetic data generator (biologically grounded)
+- Feature engineering (early passage signals → model-ready features)
+- ML models (regression + ranking)
+- Utility-based clone selection framework
 
 ---
 
-## Concept
+## 🎯 Goals
 
-We simulate a realistic CLD process including:
-```
-	•	Clone-to-clone productivity variability (log-normal)
-	•	Stability-driven productivity decay
-	•	Expression burden effects
-	•	Stress accumulation
-	•	Aggregation (quality proxy)
-	•	Batch effects
-	•	Culture mode differences (fed-batch vs perfusion)
-	•	Copy number (ddPCR-like)
-	•	Platform factor (targeted integration vs legacy)
-	•	Clone-specific decay heterogeneity
-```
-
-The framework allows:
-
-Early data (passages 3–10) → Late prediction (passages 24–30)
+- Reproduce realistic CLD phenomena:
+  - Productivity decay across passages
+  - Trade-offs between growth, productivity, and quality
+  - Hidden late-stage liabilities
+- Evaluate how well early data predicts:
+  - Stability (titer drop)
+  - Late productivity
+  - Late aggregation (quality)
+- Simulate different development strategies:
+  - **Biosimilar mode** (productivity-focused)
+  - **Novel/ADC mode** (quality-aware)
 
 ---
 
-## Project Architecture
-
-```
-Synthetic DB Generation
-        ↓
-Feature Engineering (Early-only)
-        ↓
-Multi-target ML Models
-        ↓
-Ranking & Top-K Evaluation
-        ↓
-Decision Simulation (Retention %)
-        ↓
-Platform Scenario Testing
-```
+## 🏗️ Project Structure
+CLD_ML_PIPELINE/
+│
+├── src/
+│   ├── data_generation/
+│   │   └── generate_synthetic_cld.py
+│   ├── feature_engineering/
+│   ├── modeling/
+│   └── evaluation/
+│
+├── notebooks/
+│   ├── 02c_feature_engineering.ipynb
+│   ├── 02d_modeling.ipynb
+│   └── 03b_evaluation.ipynb
+│
+├── data/
+│   ├── schema/
+│   └── synthetic/
+│
+└── README.md
 ---
 
-## Repository Structure
-```
-data/
-    schema/
-    synthetic/
-        raw/
-        processed/
+## 🧪 Synthetic Data Generator
 
-notebooks/
-    01_explore_synthetic_data.ipynb
-    02_feature_engineering.ipynb
-    02d_feature_engineering_v2.ipynb
-    02c_build_late_labels.ipynb
-    03b_multitarget_models.ipynb
-    04_clone_drop_simulation.ipynb
-    04b_predicted_late_selection.ipynb
+### Key Design Principles
 
-src/
-    data_generation/
-        generate_synthetic_cld.py
-```
----
+The generator simulates biologically plausible CLD behavior:
 
-## Synthetic Data Generator
-
-The generator simulates:
-
-**Latent variables per clone:**
-```
-	•	Productivity (P)
-	•	Stability (S)
-	•	Quality potential (Q)
-	•	Platform factor (G)
-	•	Copy number (CN)
-	•	Clone-specific decay sensitivity (k_decay_i)
-```
-**Assays:**
-```	•	Titer
-	•	VCD
-	•	Viability
-	•	Aggregation
-	•	ddPCR copy number
-```
-**Derived label:**
-	•	Productivity drop % (early vs late)
-
-The generator supports scenario switches:
-```
-enable_platform=True
-enable_copy_number=True
-enable_clone_decay_variation=True
-```
-This allows ablation and sensitivity analysis.
+- **Productivity (P)**: right-skewed distribution (few high producers)
+- **Stability (S)**: governs decay across passages
+- **Quality (Q)**: aggregation increases with stress and intrinsic liability
 
 ---
 
-## 📈 Modeling Strategy
+## ⚙️ Platform Scenarios
 
-We train 3 regression models:
-```
-	1.	Stability drop
-	2.	Late-stage titer
-	3.	Late-stage aggregation
-```
-Evaluation includes:
-```
-	•	R²
-	•	MAE
-	•	Spearman rank correlation
-	•	Top-K overlap
-	•	Top-K enrichment rate
-```
----
+### 🔴 Legacy Platform
 
-## 🎯 Multi-Objective Selection
-
-We simulate commercial clone selection using:
-```
-Utility = a*z(late_titer)
-        - b*z(drop)
-        - c*z(late_aggregation)
-```
-We evaluate:
-```
-	•	Top 5 / 10 / 20 retention
-	•	True-good recall
-	•	Ranking robustness
-```
+- High heterogeneity (position effects, silencing, integration randomness)
+- Presence of:
+  - **Super jackpot clones** (rare, high P + high S)
+  - **Aggressive clones** (high early P, unstable later)
+- Strong decoupling between early and late behavior
+- Higher noise and unpredictability
 
 ---
 
-## Platform Scenario Modeling
+### 🟢 Optimized Platform (✅ Frozen)
 
-The framework supports comparison between:
-```
-	•	Legacy random integration
-	•	Targeted integration platform
-	•	High-copy unstable clones
-	•	Optimized secretion pathway
-```
-This allows:
-
-Testing whether platform engineering improves early predictability.
+- Reduced variability (targeted integration-like behavior)
+- No super jackpot clones
+- Small **residual aggressive subgroup (~1%)**
+- Late-stage outcomes include:
+  - Hidden stochastic effects
+  - Partial decoupling from early signals
 
 ---
 
-## Scientific Foundations
+## 📊 Modeling Targets
 
-This work is informed by:
-```
-	•	Reinhart et al., Biotechnol J (2018)
-	•	Lakshmanan et al., Biotechnol Bioeng (2019)
-```
-Multi-omics evidence shows host-specific behavior and complex regulation of productivity and quality.
+From early passage data (P1–P10), we predict:
 
----
-
-## Key Insight
-
-Early → Late prediction is inherently difficult due to:
-```
-	•	Epigenetic silencing
-	•	Stress accumulation
-	•	Secretion bottlenecks
-	•	Platform effects
-	•	Stochastic events
-```
-Therefore, the goal is not perfect prediction, but:
-
-Enrichment improvement under uncertainty.
+| Target        | Description |
+|--------------|------------|
+| `drop`       | Relative titer loss (stability proxy) |
+| `late_titer` | Productivity at late passages |
+| `late_agg`   | Aggregation (quality proxy) |
 
 ---
 
-## Future Directions
-	•	Multi-omics integration
-	•	Glycosylation modeling
-	•	Secretory capacity modeling
-	•	Platform upgrade simulation
-	•	Automated weight tuning (policy optimization)
-	•	Real CLD dataset validation
-	•	Robotic integration
+## 📈 Evaluation Framework
+
+### Metrics
+
+- Regression:
+  - MAE
+  - R²
+- Ranking:
+  - Spearman correlation
+- Selection:
+  - Top-K overlap
+  - Precision@K
+  - NDCG@K
 
 ---
 
-## Current Status
-```
-✔ Synthetic CLD simulator
-✔ Multi-target ML modeling
-✔ Ranking evaluation framework
-✔ Platform scenario switches
-✔ Copy number integration
-✔ Decision simulation engine
-```
-Ongoing work:
-```
-	•	Improve early → late signal strength
-	•	Platform scenario (traditional (random integration) vs optimized (targeted insertion) calibration)
-	•	Advanced ranking metrics
-```
+## 🧠 Utility-Based Selection
+
+We define utility functions to simulate real decision-making:
+
+### Biosimilar Mode
+- Focus: maximize productivity
+- Low penalty on aggregation
+
+### Novel / ADC Mode
+- Balanced:
+  - Productivity
+  - Stability
+  - Quality (aggregation penalty)
+
 ---
 
-## Author’s Motivation
+## ✅ Current Status (Optimized Scenario)
 
-This project originates from real CLD experience in biologics manufacturing and aims to bridge AI modeling with upstream bioprocess engineering.
+The optimized generator has been calibrated and **frozen** with the following properties:
 
-## License
-Apache License 2.0
+- Late outcomes are:
+  - Predictable but **not trivial**
+  - Influenced by **hidden late-only factors**
+- Residual failure modes exist:
+  - Small aggressive subgroup (~1%)
+- Model performance:
+  - Strong but imperfect ranking
+  - Realistic degradation from early → late prediction
+
+### Key Observations
+
+- `late_titer`: moderately predictable
+- `late_agg`: harder due to noise + hidden effects
+- `drop`: remains difficult (biologically realistic)
+
+---
+
+## 🔍 Validation Checks
+
+- ✅ No feature leakage
+- ✅ Permutation tests confirm real signal usage
+- ✅ Utility optimization validated on held-out test set
+
+---
+
+## 🚀 Next Steps
+
+### 1️⃣ Legacy Scenario Realism Expansion
+
+Enhance the **legacy generator** to better reflect:
+
+- Stronger heterogeneity
+- Larger clone-to-clone variability
+- More pronounced early vs late decoupling
+- Increased noise in quality and productivity
+- Clearer distinction between:
+  - Biosimilar vs Novel/ADC strategies
+
+---
+
+### 2️⃣ CRISPR Intervention Layer
+
+Simulate targeted interventions:
+
+- Knock-in / knock-out effects
+- Stability improvement
+- Stress reduction
+- Clone rescue vs unintended trade-offs
+
+**Goal:**
+Evaluate how interventions shift clone ranking and selection outcomes
+
+---
+
+### 3️⃣ Multi-Omics Integration
+
+Introduce additional data layers:
+
+- Transcriptomics (expression burden, folding stress)
+- Epigenetics (silencing risk)
+- Proteomics (secretion efficiency)
+
+**Goal:**
+Improve prediction of late-stage behavior beyond early phenotypes
+
+---
+
+### 4️⃣ Decision Optimization
+
+- Multi-objective optimization
+- Portfolio selection under constraints
+- Active learning for clone selection
+
+---
+
+## 💡 Long-Term Vision
+
+Build a simulation + ML framework that can:
+
+- Reproduce real CLD complexity
+- Test experimental strategies virtually
+- Quantify value of additional data (omics, assays)
+- Support decision-making in bioprocess development
+
+---
+
+## 🧑‍🔬 Author Notes
+
+This project is designed as a **research + simulation sandbox**, not just a modeling exercise.
+
+> “If the model performs perfectly, the data is unrealistic.”
