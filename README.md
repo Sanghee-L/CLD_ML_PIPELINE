@@ -35,7 +35,7 @@ The pipeline includes:
 ---
 
 ## 🏗️ Project Structure
-'''
+```
 CLD_ML_PIPELINE/
 │
 ├── src/
@@ -55,7 +55,7 @@ CLD_ML_PIPELINE/
 │   └── synthetic/
 │
 └── README.md
-'''
+```
 ---
 
 ## 🧪 Synthetic Data Generator
