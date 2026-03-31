@@ -162,17 +162,17 @@ class Config:
     optimized_residual_late_extra_decay: float = 0.03
 
     # Aggregation impact is weak, mostly stochastic / hidden
-    optimized_residual_agg_shift: float = 0.08
-    optimized_residual_agg_noise_mult: float = 1.80
+    optimized_residual_agg_shift: float = 0.18
+    optimized_residual_agg_noise_mult: float = 2.20
 
     # Hidden late-only clone factors:
     # Not directly visible in early features, used to reduce overly perfect prediction
-    optimized_hidden_titer_sd: float = 0.14
-    optimized_hidden_agg_sd: float = 0.80
+    optimized_hidden_titer_sd: float = 0.18
+    optimized_hidden_agg_sd: float = 1.20
 
     # Additional late-only stochastic process noise in optimized world
-    optimized_late_titer_noise_sd: float = 0.18
-    optimized_late_agg_noise_Sd: float = 0.70
+    optimized_late_titer_noise_sd: float = 0.24
+    optimized_late_agg_noise_sd: float = 1.10
 
     # --------------------------------------
     # Copy number (ddPCR-like assay) effect on productivity
@@ -532,7 +532,7 @@ def main() -> None:
             0.0, config.optimized_late_titer_noise_sd, size = config.n_clones
         )
         hidden_agg_process = np.random.normal(
-            0.0, config.optimized_late_agg_noise_Sd, size = config.n_clones
+            0.0, config.optimized_late_agg_noise_sd, size = config.n_clones
         )
     else:
         hidden_titer_late = np.zeros(config.n_clones)
@@ -695,7 +695,7 @@ def main() -> None:
                 elif args.scenario == "optimized":
 
                     # Residual aggressive clones in optimized world:
-                    # only mildly attractive early, with subtler late failure
+                    # mildly attractive early, but later quality/productivity liabilities appear
                     if p <= config.early_max:
                         titer_mult *= config.optimized_residual_early_titer_mult
 
@@ -706,9 +706,15 @@ def main() -> None:
                     # VCD/viability mostly unaffected
                     growth_burden_mult *= 0.97
 
-                    # aggregation mostly affected through weak shift + larger noise
-                    agg_shift += config.optimized_residual_agg_shift
-                    agg_noise_sd *= config.optimized_residual_agg_noise_mult
+                    # Aggregation penalty becomes more visible from mid-late passage
+
+                    if p >= 16:
+                        agg_shift += 0.5 * config.optimized_residual_agg_shift
+                        agg_noise_sd *= 1.0 + 0.5 * (config.optimized_residual_agg_noise_mult - 1.0)
+
+                    if p >= config.late_min:
+                        agg_shift += 0.5 * config.optimized_residual_agg_shift
+                        agg_noise_sd *= 1.0 + 0,5 * (config.optimized_residual_agg_noise_mult - 1.0)
             
             # Expression burden depends on current effective productivity
             expr_burden = (P_ip / mean_P)
@@ -748,8 +754,13 @@ def main() -> None:
             # Titer depends on effective productivity + noise + batch effect
             late_titer_factor = 1.0
             late_titer_additive = 0.0
+
+            # hidden titer effect is added from mid phase (psaage 16)
+            if p >= 16:
+                late_titer_factor = np.exp(0.5 * hidden_titer_by_clone[cid])
+
             if p >= config.late_min:
-                late_titer_factor *= np.exp(hidden_titer_by_clone[cid])
+                late_titer_factor *= np.exp(0.5 * hidden_titer_by_clone[cid])
                 late_titer_additive += hidden_titer_process_by_clone[cid]
             
             titer_true = (
@@ -771,6 +782,13 @@ def main() -> None:
             # Aggregation: weak clone effect + stress + noise
             late_agg_shift = 0.0
             extra_agg_noise_sd = 0.0
+
+            # Mid-late hidden quality liability begins earlier than the late label window
+            # hidden agg liability accumulate from passage 16
+            if p >= 16:
+                late_agg_shift += 0.4 * hidden_agg_by_clone[cid]
+                extra_agg_noise_sd += 0.4 * abs(hidden_agg_process_by_clone[cid])
+
             if p >= config.late_min:
                 late_agg_shift += hidden_agg_by_clone[cid]
                 extra_agg_noise_sd += abs(hidden_agg_process_by_clone[cid])
@@ -781,8 +799,15 @@ def main() -> None:
                 + agg_shift
                 + late_agg_shift
                 )
-            aggregation = float(np.clip(
-                agg_true + np.random.normal(0, agg_noise_sd + extra_agg_noise_sd) 
+            
+            late_obs_noise = 0.0
+            if args.scenario == "optimized" and p >= config.late_min:
+                late_obs_noise = 0.35
+
+            aggregation = float(
+                np.clip(
+                agg_true 
+                + np.random.normal(0, agg_noise_sd + extra_agg_noise_sd + late_obs_noise) 
                 + be["aggregation"], 
                 0.0, 
                 100.0)
