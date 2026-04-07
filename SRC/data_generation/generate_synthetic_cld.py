@@ -136,11 +136,17 @@ class Config:
     super_extra_stress_relief: float = 0.08 # super clones have better folding/secretion, so less stress and better quality
     super_agg_shift: float = -0.15 # super clones have better quality, so lower aggregation
 
-    # Aggressive clone : looks good early, then loses productivity stability
+    # Aggressive clone : looks good early, then loses productivity stability (false positive)
+    # Early: high growth / viability / titer look attractive
+    # Late: productivity collapses and quality liability appears 
     aggressive_early_titer_mult: float = 1.12
+    aggressive_early_vcd_mult: float = 1.25
+    aggressive_early_viab_bonus: float = 3.0
+    
     aggressive_early_fade: float = 0.015 # additional productivity decay per passage for aggressive clones
     aggressive_instability_start: int = 7 # passage at which aggressive clones start to become unstable
     aggressive_late_extra_decay: float = 0.06 # aggressive clones have faster decay starting mid-passage, so they lose more productivity late
+    
     aggressive_burden_relief: float = 0.10 # aggressive clones have more burden relief as they lose productivity
     aggressive_extra_stress: float = 0.015 # aggressive clones have more expression stress, so slightly worse quality
     aggressive_agg_shift: float = 0.10 # aggressive clones have worse quality, so higher aggregation
@@ -655,6 +661,8 @@ def main() -> None:
             extra_stress = 0.0
             agg_shift = 0.0
             agg_noise_sd = config.aggregation_noise_sd
+            vcd_multiplier = 1.0
+            extra_viab_bonus = 0.0
 
             # ---- Super clone : good early signal + sustained late performance ----
             if is_super_clone:
@@ -673,20 +681,25 @@ def main() -> None:
             # ---- Aggressive clone : looks good early, then collapse productivity stability ----
             elif is_aggr_clone:
                 if args.scenario == "legacy":
-                    # Early phase: looks attractive in titer / qP
+                    # Early phase: aggressive clones look excellent
+                    # in titer, growth, and viability
                     if p <= config.early_max:
                         early_steps = max(0, p - config.stability_early_start)
                         fade = max(0.85, 1.0 - config.aggressive_early_fade * early_steps)
+                        
                         titer_mult *= config.aggressive_early_titer_mult * fade
-                    
+                        growth_burden_mult *= (1.0 - config.aggressive_burden_relief)
+                        vcd_multiplier = config.aggressive_early_vcd_mult
+                        extra_viab_bonus = config.aggressive_early_viab_bonus
+                    else:
+                        vcd_multiplier = 1.0
+                        extra_viab_bonus = 0.0
+
                     # Late phase: hidden instability becomes visible
                     if p >= config.aggressive_instability_start:
                         late_steps = p - config.aggressive_instability_start + 1
                         P_ip *= np.exp(-config.aggressive_late_extra_decay * late_steps)
                     
-                    # Keep VCD/viability mostly normal
-                    growth_burden_mult *= (1.0 - config.aggressive_burden_relief)
-
                     # Quality is only weakly affected, mostly via noise
                     extra_stress += config.aggressive_extra_stress
                     agg_shift += config.aggressive_agg_shift
@@ -772,11 +785,11 @@ def main() -> None:
             # VCD: adaptation improves over passage, but growth burden is only mildly affected
             adaptation_factor = (1.0 + config.adapt_vcd * np.log1p(p))
             burden_factor = np.exp(-config.burden_coeff * effective_growth_burden) # higher burden -> smaller VCD
-            vcd_true = config.base_vcd * adaptation_factor * burden_factor
+            vcd_true = config.base_vcd * adaptation_factor * burden_factor * vcd_multiplier
             vcd = max(0.0, vcd_true + np.random.normal(0, config.vcd_noise_sd) + be["vcd"])
 
             # Viability: largenly maintained, only weakly burden-sensitive
-            viab_true = 95.0 + config.adapt_viab * np.log1p(p) - 2.0 * effective_growth_burden
+            viab_true = 95.0 + config.adapt_viab * np.log1p(p) - 2.0 * effective_growth_burden + extra_viab_bonus
             viability = float(np.clip(viab_true + np.random.normal(0, config.viability_noise_sd) + be["viability"], 0.0, 100.0))
 
             # Aggregation: weak clone effect + stress + noise
