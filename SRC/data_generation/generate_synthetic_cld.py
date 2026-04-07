@@ -152,6 +152,12 @@ class Config:
     aggressive_agg_shift: float = 0.10 # aggressive clones have worse quality, so higher aggregation
     aggressive_agg_noise_mult: float = 1.50 # aggressive clones have more heterogeneous quality, so higher aggregation noise
 
+    # Clone-to-clone variation within aggressive subgroup
+    aggressive_early_vcd_sd: float = 0.10
+    aggressive_early_viab_sd: float = 0.80
+    aggressive_early_titer_sd: float = 0.05
+    aggressive_late_decay_jitter_sd: float = 0.02
+
     # --------------------------------------
     # Optimized residual-failure knobs
     # --------------------------------------
@@ -222,6 +228,17 @@ class Config:
     stress_base: float = 0.08
     env_stress_slope: float = 0.002 # mild passage-related stress increase
     expr_stress: float = 0.06 # expression burden stress (depends on P_ip)
+
+    # --------------------------------------
+    # Legacy late aggregation realism knobs
+    # --------------------------------------
+    legacy_late_agg_hidden_sd: float = 2.0
+    legacy_late_agg_process_sd: float = 1.2
+    legacy_late_agg_obs_noise: float = 0.8
+
+    # weaken direct carryover from early aggregation
+    legacy_mid_agg_hidden_mult: float = 0.25
+    legacy_late_agg_hidden_mult: float = 0.75
 
     # Quality proxy parameters
     gamma_agg_intrinsic: float = 20.0
@@ -513,6 +530,67 @@ def main() -> None:
         is_super = np.zeros(config.n_clones, dtype=bool)
         is_aggr = np.zeros(config.n_clones, dtype=bool)
 
+    # --------------------------------------
+    # Clone-level variation within aggressive subgroup
+    # --------------------------------------
+    aggressive_vcd_boost_i = np.ones(config.n_clones)
+    aggressive_viab_bonus_i = np.zeros(config.n_clones)
+    aggressive_titer_mult_i = np.ones(config.n_clones)
+    aggressive_late_decay_i = np.full(config.n_clones, config.aggressive_late_extra_decay)
+
+    if args.scenario == "legacy":
+        aggressive_vcd_boost_i = np.where(
+            is_aggr,
+            np.clip(
+                np.random.normal(
+                    config.aggressive_early_vcd_mult,
+                    config.aggressive_early_vcd_sd,
+                    size=config.n_clones
+                ),
+                1.00, 1.45
+            ),
+            1.0
+        )
+
+        aggressive_viab_bonus_i = np.where(
+            is_aggr,
+            np.clip(
+                np.random.normal(
+                    config.aggressive_early_viab_bonus,
+                    config.aggressive_early_viab_sd,
+                    size=config.n_clones
+                ),
+                0.5, 4.5
+            ),
+            0.0
+        )
+
+        aggressive_titer_mult_i = np.where(
+            is_aggr,
+            np.clip(
+                np.random.normal(
+                    config.aggressive_early_titer_mult,
+                    config.aggressive_early_titer_sd,
+                    size=config.n_clones
+                ),
+                1.00, 1.20
+            ),
+            1.0
+        )
+
+        aggressive_late_decay_i = np.where(
+            is_aggr,
+            np.clip(
+                np.random.normal(
+                    config.aggressive_late_extra_decay,
+                    config.aggressive_late_decay_jitter_sd,
+                    size=config.n_clones
+                ),
+                0.03, 0.10
+            ),
+            config.aggressive_late_extra_decay
+        )
+
     # Optimized platform reduces silencing/decay speed (better epigenetic stability)
     # We can apply this reduction to all clones if enable_platform_groups is False (i.e., all clones on optimized platform), or only to the fraction of clones on optimized platform if grouping is enabled.
     if config.enable_platform and config.enable_platform_groups:
@@ -540,6 +618,16 @@ def main() -> None:
         hidden_agg_process = np.random.normal(
             0.0, config.optimized_late_agg_noise_sd, size = config.n_clones
         )
+
+    elif args.scenario == "legacy":
+        hidden_titer_late = np.zeros(config.n_clones)
+        hidden_agg_late = np.random.normal(
+            0.0, config.legacy_late_agg_hidden_sd, size = config.n_clones
+        )
+        hidden_titer_process = np.zeros(config.n_clones)
+        hidden_agg_process = np.random.normal(
+            0.0, config.legacy_late_agg_process_sd, size = config.n_clones
+        )
     else:
         hidden_titer_late = np.zeros(config.n_clones)
         hidden_agg_late = np.zeros(config.n_clones)
@@ -561,8 +649,11 @@ def main() -> None:
         "hidden_titer_late": hidden_titer_late,
         "hidden_agg_late": hidden_agg_late,
         "hidden_titer_process": hidden_titer_process,
-        "hidden_agg_process": hidden_agg_process
-
+        "hidden_agg_process": hidden_agg_process,
+        "aggressive_vcd_boost_i": aggressive_vcd_boost_i,
+        "aggressive_viab_bonus_i": aggressive_viab_bonus_i,
+        "aggressive_titer_mult_i": aggressive_titer_mult_i,
+        "aggressive_late_decay_i": aggressive_late_decay_i,
     })
     
     
@@ -576,6 +667,10 @@ def main() -> None:
     hidden_agg_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_late"]))
     hidden_titer_process_by_clone = dict(zip(latents["clone_id"], latents["hidden_titer_process"]))
     hidden_agg_process_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_process"]))
+    aggr_vcd_boost_by_clone = dict(zip(latents["clone_id"], latents["aggressive_vcd_boost_i"]))
+    aggr_viab_bonus_by_clone = dict(zip(latents["clone_id"], latents["aggressive_viab_bonus_i"]))
+    aggr_titer_mult_by_clone = dict(zip(latents["clone_id"], latents["aggressive_titer_mult_i"]))
+    aggr_late_decay_by_clone = dict(zip(latents["clone_id"], latents["aggressive_late_decay_i"]))
 
     pd.DataFrame({
         "clone_id": clone_ids,
@@ -687,10 +782,10 @@ def main() -> None:
                         early_steps = max(0, p - config.stability_early_start)
                         fade = max(0.85, 1.0 - config.aggressive_early_fade * early_steps)
                         
-                        titer_mult *= config.aggressive_early_titer_mult * fade
+                        titer_mult *= aggr_titer_mult_by_clone[cid] * fade
                         growth_burden_mult *= (1.0 - config.aggressive_burden_relief)
-                        vcd_multiplier = config.aggressive_early_vcd_mult
-                        extra_viab_bonus = config.aggressive_early_viab_bonus
+                        vcd_multiplier = aggr_vcd_boost_by_clone[cid]
+                        extra_viab_bonus = aggr_viab_bonus_by_clone[cid]
                     else:
                         vcd_multiplier = 1.0
                         extra_viab_bonus = 0.0
@@ -698,7 +793,7 @@ def main() -> None:
                     # Late phase: hidden instability becomes visible
                     if p >= config.aggressive_instability_start:
                         late_steps = p - config.aggressive_instability_start + 1
-                        P_ip *= np.exp(-config.aggressive_late_extra_decay * late_steps)
+                        P_ip *= np.exp(-aggr_late_decay_by_clone[cid] * late_steps)
                     
                     # Quality is only weakly affected, mostly via noise
                     extra_stress += config.aggressive_extra_stress
@@ -798,24 +893,36 @@ def main() -> None:
 
             # Mid-late hidden quality liability begins earlier than the late label window
             # hidden agg liability accumulate from passage 16
-            if p >= 16:
-                late_agg_shift += 0.4 * hidden_agg_by_clone[cid]
-                extra_agg_noise_sd += 0.4 * abs(hidden_agg_process_by_clone[cid])
+            if args.scenario == "legacy":
+                if p >= 16:
+                    late_agg_shift += config.legacy_mid_agg_hidden_mult * hidden_agg_by_clone[cid]
+                    extra_agg_noise_sd += 0.5 * abs(hidden_agg_process_by_clone[cid])
 
-            if p >= config.late_min:
-                late_agg_shift += hidden_agg_by_clone[cid]
-                extra_agg_noise_sd += abs(hidden_agg_process_by_clone[cid])
+                if p >= config.late_min:
+                    late_agg_shift += config.legacy_late_agg_hidden_mult * hidden_agg_by_clone[cid]
+                    extra_agg_noise_sd += abs(hidden_agg_process_by_clone[cid])
 
+            else:
+                if p >= 16:
+                    late_agg_shift += 0.4 * hidden_agg_by_clone[cid]
+                    extra_agg_noise_sd += 0.4 * abs(hidden_agg_process_by_clone[cid])
+
+                if p >= config.late_min:
+                    late_agg_shift += hidden_agg_by_clone[cid]
+                    extra_agg_noise_sd += abs(hidden_agg_process_by_clone[cid])
+            
             agg_true = (
                 config.gamma_agg_intrinsic * (1 - row["quality_potential"]) 
                 + config.delta_agg_stress * stress 
                 + agg_shift
                 + late_agg_shift
                 )
-            
+
             late_obs_noise = 0.0
             if args.scenario == "optimized" and p >= config.late_min:
                 late_obs_noise = 0.35
+            elif args.scenario == "legacy" and p >= config.late_min:
+                late_obs_noise = config.legacy_late_agg_obs_noise
 
             aggregation = float(
                 np.clip(
