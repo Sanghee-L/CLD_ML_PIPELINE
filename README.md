@@ -46,9 +46,10 @@ CLD_ML_PIPELINE/
 │   └── evaluation/
 │
 ├── notebooks/
-│   ├── 02c_feature_engineering.ipynb
-│   ├── 02d_modeling.ipynb
-│   └── 03b_evaluation.ipynb
+│   ├── 01_explore_synthetic_data.ipynb
+│   ├── 02_Feature_Engineering_and_Target_Construction_for_CLD_modeling.ipynb
+│   ├── 03_Multi-Objective_Clone_Modeling.ipynb
+│   └── 04_Decision_Engine_and_Validation_for_Predicted_Late-stage.ipynb
 │
 ├── data/
 │   ├── schema/
@@ -56,6 +57,23 @@ CLD_ML_PIPELINE/
 │
 └── README.md
 ```
+---
+
+## 🔄 Pipeline Flow
+
+1. Data Generation
+   - Simulate realistic CLD clone populations
+
+2. Feature Engineering
+   - Transform early signals into predictive features
+
+3. Modeling & Evaluation
+   - Train models and evaluate predictive performance
+
+4. Decision Engine
+   - Apply business-specific selection strategies
+   - Validate decision quality and robustness
+
 ---
 
 ## 🧪 Synthetic Data Generator
@@ -135,6 +153,51 @@ We define utility functions to simulate real decision-making:
   - Productivity
   - Stability
   - Quality (aggregation penalty)
+
+---
+
+## 🧠 Decision Engine
+
+A multi-stage decision framework is applied to predicted late-stage outcomes.
+
+The engine simulates real CLD decision processes using:
+
+- Stage 1 screening (threshold-based filtering)
+- Stage 2 rescue logic (recover borderline but promising clones)
+- Final Top-K selection
+
+Two decision modes are implemented:
+
+### Biosimilar Mode
+- Prioritizes productivity
+- Minimal penalty on aggregation
+- Higher tolerance for risk
+
+### Novel / ADC Mode
+- Balances productivity, stability, and quality
+- Strong penalty on aggregation
+- More conservative selection
+
+This enables simulation of strategy-dependent clone selection behavior.
+
+---
+
+## 🔍 Decision Validation
+
+The decision engine is validated using multiple sanity checks:
+
+- Mode separation:
+  - Ensures biosimilar and novel strategies produce different selections
+- Rescue volume:
+  - Confirms rescue logic is not overly aggressive
+- Final stability:
+  - Evaluates stability of Top-10 / Top-3 selections
+- Utility alignment:
+  - Measures overlap between predicted and true optimal clones
+
+These checks ensure that:
+
+> The decision system is realistic, stable, and biologically plausible.
 
 ---
 
