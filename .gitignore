@@ -1,7 +1,29 @@
 # Local backup folder
 BackUp_SDL_poc_v1/
+archive
 
 # Generated synthetic outputs
 data/synthetic/raw/*.db
 data/synthetic/raw/*.csv
 data/synthetic/processed/*.csv
+
+# macOS
+.DS_Store
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Optional: large local outputs
+*.log
