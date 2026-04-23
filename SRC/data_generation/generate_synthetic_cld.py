@@ -232,17 +232,29 @@ class Config:
     # --------------------------------------
     # Legacy late aggregation realism knobs
     # --------------------------------------
-    legacy_late_agg_hidden_sd: float = 2.0
-    legacy_late_agg_process_sd: float = 1.2
-    legacy_late_agg_obs_noise: float = 0.8
+    # Hidden late-only clone liability
+    legacy_late_agg_hidden_sd: float = 2.6
 
-    # weaken direct carryover from early aggregation
-    legacy_mid_agg_hidden_mult: float = 0.25
-    legacy_late_agg_hidden_mult: float = 0.75
+    # Late process variability (batch/process-like instability not visable early)
+    legacy_late_agg_process_sd: float = 1.6
+
+    # Additional observation noise at late window
+    legacy_late_agg_obs_noise: float = 1.1
+
+    # Mid/late hidden contribution scaling
+    legacy_mid_agg_hidden_mult: float = 0.20
+    legacy_late_agg_hidden_mult: float = 0.95
+
+    # Additional late decoupling from early features
+    legacy_late_agg_extra_decouple_sd: float = 0.9
+
+    # Aggressive-clone late quality worsening
+    aggressive_late_agg_shift: float = 0.35
+    aggressive_late_agg_noise_mult_late: float = 2.00
 
     # Quality proxy parameters
-    gamma_agg_intrinsic: float = 20.0
-    delta_agg_stress: float = 6.0
+    gamma_agg_intrinsic: float = 18.0
+    delta_agg_stress: float = 7.0    
 
 config = Config()
 
@@ -795,10 +807,21 @@ def main() -> None:
                         late_steps = p - config.aggressive_instability_start + 1
                         P_ip *= np.exp(-aggr_late_decay_by_clone[cid] * late_steps)
                     
-                    # Quality is only weakly affected, mostly via noise
+                    # Quality liability becomes more visible later than early
                     extra_stress += config.aggressive_extra_stress
-                    agg_shift += config.aggressive_agg_shift
+
+                    # Mild early aggregating penalty
+                    agg_shift += 0.5 * config.aggressive_agg_shift
                     agg_noise_sd *= config.aggressive_agg_noise_mult
+
+                    # Additional late-emerging aggregation liability
+                    if p >= 16:
+                        agg_shift += 0.5 * config.aggressive_late_agg_shift
+                        agg_noise_sd *= 1.0 + 0.5 * (config.aggressive_late_agg_noise_mult_late - 1.0)
+
+                    if p >= config.late_min:
+                        agg_shift += 0.5 * config.aggressive_late_agg_shift
+                        agg_noise_sd *= 1.0 + 0.5 * (config.aggressive_late_agg_noise_mult_late - 1.0)
                 
                 elif args.scenario == "optimized":
 
@@ -911,27 +934,35 @@ def main() -> None:
                     late_agg_shift += hidden_agg_by_clone[cid]
                     extra_agg_noise_sd += abs(hidden_agg_process_by_clone[cid])
             
+            late_hidden_decouple = 0.0
+
+            if args.scenario == "legacy":
+                # Extra late-only hidden decoupling: makes late aggregation harder to infer from early data
+                if p >= config.late_min:
+                    late_hidden_decouple = np.random.normal(
+                        0.0, config.legacy_late_agg_extra_decouple_sd
+                    )
             agg_true = (
-                config.gamma_agg_intrinsic * (1 - row["quality_potential"]) 
-                + config.delta_agg_stress * stress 
+                config.gamma_agg_intrinsic * (1 - row["quality_potential"])
+                + config.delta_agg_stress * stress
                 + agg_shift
                 + late_agg_shift
-                )
+                + late_hidden_decouple
+            )
 
             late_obs_noise = 0.0
             if args.scenario == "optimized" and p >= config.late_min:
                 late_obs_noise = 0.35
             elif args.scenario == "legacy" and p >= config.late_min:
                 late_obs_noise = config.legacy_late_agg_obs_noise
-
+            
             aggregation = float(
                 np.clip(
-                agg_true 
-                + np.random.normal(0, agg_noise_sd + extra_agg_noise_sd + late_obs_noise) 
-                + be["aggregation"], 
-                0.0, 
-                100.0)
+                    agg_true
+                    + np.random.normal(0, agg_noise_sd + extra_agg_noise_sd + late_obs_noise)
+                    + be["aggregation"], 0.0, 100.0
                 )
+            )
 
             # Store assay result row
             assay_result_rows.extend([
