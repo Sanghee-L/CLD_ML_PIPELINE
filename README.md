@@ -280,6 +280,70 @@ Improve prediction of late-stage behavior beyond early phenotypes
 
 ---
 
+## Rescue Clone Strategy & Process Linkage
+
+In real CLD workflows, not all promising clones are discarded if they fail initial selection criteria.
+
+This pipeline introduces the concept of **"rescue clones"**:
+
+- Clones that show:
+  - high early productivity but poor stability (aggressive clones)
+  - borderline performance with recoverable characteristics
+
+These clones are not directly selected, but are flagged for potential recovery.
+
+---
+
+### Downstream Process Optimization Link
+
+Rescue clones enable simulation of process-level interventions:
+
+- Media optimization
+- Oxygen / pH control
+- Lactate management
+- Feeding strategies
+
+These interventions can:
+
+- Improve stability (reduce productivity drop)
+- Reduce aggregation (improve quality)
+- Enhance late-stage productivity
+
+---
+
+### Bridge to PAT (Process Analytical Technology)
+
+By modeling both:
+
+- intrinsic clone properties (biology)
+- extrinsic control variables (process conditions)
+
+this framework can be extended toward:
+
+> closed-loop optimization using PAT signals
+
+This enables:
+
+- dynamic process control
+- adaptive clone–process pairing
+- upstream process optimization beyond clone selection
+
+---
+
+### 🚀 Strategic Impact
+
+This extends the pipeline from:
+
+"clone selection"
+
+to:
+
+"clone + process co-optimization"
+
+which more closely reflects real-world bioprocess development.
+
+---
+
 ## 💡 Long-Term Vision
 
 Build a simulation + ML framework that can:
@@ -288,6 +352,39 @@ Build a simulation + ML framework that can:
 - Test experimental strategies virtually
 - Quantify value of additional data (omics, assays)
 - Support decision-making in bioprocess development
+
+---
+
+### 🔬 Future Expansion: End-to-End Bioprocess Optimization
+
+The long-term vision extends beyond upstream CLD into full bioprocess optimization:
+
+- Integration of LC/GC analytical data
+- Glycosylation (glyco-profile) prediction and control
+- Downstream purification and QC optimization
+
+By combining:
+
+- clone intrinsic properties
+- process conditions
+- analytical quality attributes
+
+this framework can evolve into:
+
+> a fully integrated self-driving lab (SDL) system
+
+with closed-loop optimization across:
+
+- cell line development
+- upstream processing
+- downstream purification
+- quality control
+
+This enables:
+
+- automated experiment design
+- real-time adaptive control
+- end-to-end biologics optimization
 
 ---
 
