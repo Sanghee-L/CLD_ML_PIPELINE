@@ -1,0 +1,6 @@
+metric,synthetic_value,expected_min,expected_max,status,note
+viability_fraction_p05,0.9273421823725981,0.7,0.99,within broad range,Low-tail viability should be plausible; too high may indicate overly clean simulation.
+late_aggregation_p95,11.961979579820923,2.0,20.0,within broad range,Aggregation p95 should show a meaningful quality-risk tail.
+qp_drop_p95,0.7749015559936063,0.2,0.9,within broad range,qP drop p95 should show stability failure risk.
+aggressive_prevalence,0.0376,0.005,0.1,within broad range,Aggressive false-positive subgroup should be rare but detectable.
+max_abs_early_late_spearman,0.8872846822753873,0.3,0.8,above expected,Too high suggests synthetic early-late relationships may be overly clean.

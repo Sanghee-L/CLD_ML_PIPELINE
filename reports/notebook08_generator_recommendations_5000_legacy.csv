@@ -1,0 +1,2 @@
+issue,evidence,recommendation,priority
+Early-to-late predictability too strong,max_abs_early_late_spearman = 0.887,"Increase hidden late-only noise, epigenetic drift, and clone-specific stochasticity.",High

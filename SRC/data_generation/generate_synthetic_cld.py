@@ -230,6 +230,30 @@ class Config:
     expr_stress: float = 0.06 # expression burden stress (depends on P_ip)
 
     # --------------------------------------
+    # Legacy late titer realism knobs
+    # --------------------------------------
+    # Hidden late-only productivity effects.
+    # These reduce overly deterministic early-to-late predictability.
+    legacy_late_titer_hidden_sd: float = 0.22
+
+    # Clone-level late process effect for titer
+    # Not visible in early passages.
+    legacy_late_titer_process_sd: float = 0.18
+
+    # Additional observation/process noise in the late stability window.
+    legacy_late_titer_obs_noise: float = 0.12
+
+    # Mid-phase onset strength for hidden titer effects.
+    legacy_mid_titer_hidden_mult: float = 0.25
+
+    # Late-phase strength for hidden titer effects.
+    legacy_late_titer_hidden_mult: float = 0.75
+
+    # Clone-specific residual growth effect to reduce deterministic
+    # VCD-productivity coupling
+    legacy_vcd_residual_sd: float = 0.10
+
+    # --------------------------------------
     # Legacy late aggregation realism knobs
     # --------------------------------------
     # Hidden late-only clone liability
@@ -632,19 +656,40 @@ def main() -> None:
         )
 
     elif args.scenario == "legacy":
-        hidden_titer_late = np.zeros(config.n_clones)
+        # Late-only hidden titer effects make late productivity less perfectly
+        # predictable from early titer/VCD/qP features.
+
+        hidden_titer_late = np.random.normal(
+            0.0, config.legacy_late_titer_hidden_sd, size = config.n_clones
+        )
+
         hidden_agg_late = np.random.normal(
             0.0, config.legacy_late_agg_hidden_sd, size = config.n_clones
         )
-        hidden_titer_process = np.zeros(config.n_clones)
+
+        # Clone-level late process residuals.
+        hidden_titer_process = np.random.normal(
+            0.0, config.legacy_late_titer_process_sd, size = config.n_clones
+        )
+
         hidden_agg_process = np.random.normal(
             0.0, config.legacy_late_agg_process_sd, size = config.n_clones
         )
+
     else:
         hidden_titer_late = np.zeros(config.n_clones)
         hidden_agg_late = np.zeros(config.n_clones)
         hidden_titer_process = np.zeros(config.n_clones)
         hidden_agg_process = np.zeros(config.n_clones)
+
+    # Hidden VCD residual effect:
+    # reduces overly deterministic VCD-productivity coupling.
+    if args.scenario == "legacy":
+        hidden_vcd_residual = np.random.normal(
+            0.0, config.legacy_vcd_residual_sd, size = config.n_clones
+            )
+    else:
+        hidden_vcd_residual = np.zeros(config.n_clones)
 
     latents = pd.DataFrame({
         "clone_id": clone_ids,
@@ -666,6 +711,7 @@ def main() -> None:
         "aggressive_viab_bonus_i": aggressive_viab_bonus_i,
         "aggressive_titer_mult_i": aggressive_titer_mult_i,
         "aggressive_late_decay_i": aggressive_late_decay_i,
+        "hidden_vcd_residual" : hidden_vcd_residual,
     })
     
     
@@ -679,6 +725,8 @@ def main() -> None:
     hidden_agg_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_late"]))
     hidden_titer_process_by_clone = dict(zip(latents["clone_id"], latents["hidden_titer_process"]))
     hidden_agg_process_by_clone = dict(zip(latents["clone_id"], latents["hidden_agg_process"]))
+    hidden_vcd_residual_by_clone = dict(zip(latents["clone_id"], latents["hidden_vcd_residual"]))
+
     aggr_vcd_boost_by_clone = dict(zip(latents["clone_id"], latents["aggressive_vcd_boost_i"]))
     aggr_viab_bonus_by_clone = dict(zip(latents["clone_id"], latents["aggressive_viab_bonus_i"]))
     aggr_titer_mult_by_clone = dict(zip(latents["clone_id"], latents["aggressive_titer_mult_i"]))
@@ -886,24 +934,55 @@ def main() -> None:
             late_titer_factor = 1.0
             late_titer_additive = 0.0
 
-            # hidden titer effect is added from mid phase (psaage 16)
+            # Hidden titer effect is added from mid phase.
+            # In legacy, this is intentionally late-only / partially hidden
+            # to reduce overly easy early-to-late prediction
             if p >= 16:
-                late_titer_factor = np.exp(0.5 * hidden_titer_by_clone[cid])
-
-            if p >= config.late_min:
-                late_titer_factor *= np.exp(0.5 * hidden_titer_by_clone[cid])
-                late_titer_additive += hidden_titer_process_by_clone[cid]
+                if args.scenario == "legacy":
+                    late_titer_factor *= np.exp(
+                        config.legacy_mid_titer_hidden_mult * hidden_titer_by_clone[cid]
+                    )
+                else:
+                    late_titer_factor *= np.exp(0.5 * hidden_titer_by_clone[cid])
             
+            if p >= config.late_min:
+                if args.scenario == "legacy":
+                    late_titer_factor *= np.exp(
+                        config.legacy_late_titer_hidden_mult * hidden_titer_by_clone[cid]
+                    )
+                    late_titer_additive += hidden_titer_process_by_clone[cid]
+                else:
+                    late_titer_factor *= np.exp(0.5 * hidden_titer_by_clone[cid])
+                    late_titer_additive += hidden_titer_process_by_clone[cid]
+
             titer_true = (
                 config.alpha_titer * P_ip * titer_mult * late_titer_factor
                 + late_titer_additive)
-            titer = max(0.0, titer_true
-                         + np.random.normal(0, config.titer_noise_sd) + be["titer"])
+            late_titer_obs_noise = 0.0
+            if args.scenario == "legacy" and p >= config.late_min:
+                late_titer_obs_noise = config.legacy_late_titer_obs_noise
+
+            titer = max(
+                0.0,
+                titer_true
+                + np.random.normal(0, config.titer_noise_sd + late_titer_obs_noise)
+                + be["titer"]
+            )
             
             # VCD: adaptation improves over passage, but growth burden is only mildly affected
             adaptation_factor = (1.0 + config.adapt_vcd * np.log1p(p))
             burden_factor = np.exp(-config.burden_coeff * effective_growth_burden) # higher burden -> smaller VCD
-            vcd_true = config.base_vcd * adaptation_factor * burden_factor * vcd_multiplier
+            
+            # Clone-specific residual VCD effect weakens deterministic productivity-burden coupling
+            vcd_residual_factor = np.exp(hidden_vcd_residual_by_clone[cid])
+            
+            vcd_true = (
+                config.base_vcd 
+                * adaptation_factor 
+                * burden_factor 
+                * vcd_multiplier
+                * vcd_residual_factor
+            )
             vcd = max(0.0, vcd_true + np.random.normal(0, config.vcd_noise_sd) + be["vcd"])
 
             # Viability: largenly maintained, only weakly burden-sensitive
