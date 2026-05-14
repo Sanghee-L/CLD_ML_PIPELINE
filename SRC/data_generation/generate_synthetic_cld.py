@@ -139,24 +139,24 @@ class Config:
     # Aggressive clone : looks good early, then loses productivity stability (false positive)
     # Early: high growth / viability / titer look attractive
     # Late: productivity collapses and quality liability appears 
-    aggressive_early_titer_mult: float = 1.12
-    aggressive_early_vcd_mult: float = 1.25
-    aggressive_early_viab_bonus: float = 3.0
+    aggressive_early_titer_mult: float = 1.07
+    aggressive_early_vcd_mult: float = 1.12
+    aggressive_early_viab_bonus: float = 1.5
     
-    aggressive_early_fade: float = 0.015 # additional productivity decay per passage for aggressive clones
+    aggressive_early_fade: float = 0.020 # additional productivity decay per passage for aggressive clones
     aggressive_instability_start: int = 7 # passage at which aggressive clones start to become unstable
-    aggressive_late_extra_decay: float = 0.06 # aggressive clones have faster decay starting mid-passage, so they lose more productivity late
+    aggressive_late_extra_decay: float = 0.055 # aggressive clones have faster decay starting mid-passage, so they lose more productivity late
     
     aggressive_burden_relief: float = 0.10 # aggressive clones have more burden relief as they lose productivity
-    aggressive_extra_stress: float = 0.015 # aggressive clones have more expression stress, so slightly worse quality
-    aggressive_agg_shift: float = 0.10 # aggressive clones have worse quality, so higher aggregation
-    aggressive_agg_noise_mult: float = 1.50 # aggressive clones have more heterogeneous quality, so higher aggregation noise
+    aggressive_extra_stress: float = 0.010 # aggressive clones have more expression stress, so slightly worse quality
+    aggressive_agg_shift: float = 0.06 # aggressive clones have worse quality, so higher aggregation
+    aggressive_agg_noise_mult: float = 1.25 # aggressive clones have more heterogeneous quality, so higher aggregation noise
 
     # Clone-to-clone variation within aggressive subgroup
-    aggressive_early_vcd_sd: float = 0.10
-    aggressive_early_viab_sd: float = 0.80
-    aggressive_early_titer_sd: float = 0.05
-    aggressive_late_decay_jitter_sd: float = 0.02
+    aggressive_early_vcd_sd: float = 0.16
+    aggressive_early_viab_sd: float = 1.20
+    aggressive_early_titer_sd: float = 0.08
+    aggressive_late_decay_jitter_sd: float = 0.030
 
     # --------------------------------------
     # Optimized residual-failure knobs
@@ -202,6 +202,58 @@ class Config:
     # Clone-specific decay variation
     # --------------------------------------
     k_decay_sd: float = 0.25 # k_i = k_decay * exp(N(0, k_decay_sd)) 
+
+    # --------------------------------------
+    # Clone x process response latent variables
+    # --------------------------------------
+    # These latent variables do NOT directly enter early ML features.
+    # They are exported to clone_latent_truths CSV and used later
+    # in Notebook07 for clone x process interaction simulation.
+    #
+    # Use a separate RNG for these latents so adading them does not
+    # change the original assay simulation random sequence.
+    process_latent_noise_sd: float = 0.12
+
+    # How strongly high productivity / high CN contributes to secretion burden.
+    secretion_burden_P_weight: float = 0.55
+    secretion_burden_CN_weight: float = 0.25
+    secretion_burden_lowQ_weight: float = 0.20
+
+    # Subgroup modifiers for process-response latent biology.
+    super_stress_adapt_bonus: float = 0.08
+    super_burden_relief_latent: float = 0.08
+    aggressive_stress_adapt_penalty: float = 0.06
+    aggressive_perfusion_rescue_bonus: float = 0.08
+    aggressive_process_risk_bonus: float = 0.08
+
+    # --------------------------------------
+    # Product quality / glycosylation latent variables
+    # --------------------------------------
+    # These are hidden clone-level quality attributes used later
+    # in Notebook09 for glycosylation / quality coupling simulation.
+    # They are exported only to clone_latent_truths CSV.
+    glyco_latent_noise_sd: float = 0.10
+
+    # Coupling strengths
+    glycan_maturity_stress_adapt_weight: float = 0.12
+    glycan_maturity_process_risk_penalty: float = 0.10
+
+    mannose_process_risk_weight: float = 0.20
+    mannose_burden_weight: float = 0.10
+
+    aggregation_process_risk_weight: float = 0.25
+    aggregation_burden_weight: float = 0.15
+    aggregation_stress_adapt_relief: float = 0.10
+
+    galactosylation_qp_penalty_weight: float = 0.12
+    galactosylation_maturity_weight: float = 0.18
+
+    sialylation_maturity_weight: float = 0.15
+    sialylation_stress_adapt_weight: float = 0.10
+
+    quality_consistency_stress_adapt_weight: float = 0.20
+    quality_consistency_process_risk_penalty: float = 0.20
+    quality_consistency_burden_penalty: float = 0.10
 
     # Scaling from latent P -> physical units
     alpha_titer : float = 0.03 # latetn units to g/L
@@ -583,7 +635,7 @@ def main() -> None:
                     config.aggressive_early_vcd_sd,
                     size=config.n_clones
                 ),
-                1.00, 1.45
+                0.95, 1.35
             ),
             1.0
         )
@@ -596,7 +648,7 @@ def main() -> None:
                     config.aggressive_early_viab_sd,
                     size=config.n_clones
                 ),
-                0.5, 4.5
+                -0.5, 3.5
             ),
             0.0
         )
@@ -609,7 +661,7 @@ def main() -> None:
                     config.aggressive_early_titer_sd,
                     size=config.n_clones
                 ),
-                1.00, 1.20
+                0.95, 1.18
             ),
             1.0
         )
@@ -635,6 +687,233 @@ def main() -> None:
     productivities = P
     stabilities = S
     quality_potentials = Q
+
+        # --------------------------------------
+    # Clone × process response latent variables
+    # --------------------------------------
+    # These variables represent clone-specific process response biology.
+    # They are not stored in DB assay tables and should not be used as
+    # direct early-stage ML features.
+    #
+    # They will be used in Notebook07 to simulate:
+    # - media/feed sensitivity
+    # - perfusion rescue
+    # - temperature shift response
+    # - process risk sensitivity
+    #
+    # Important:
+    # Use an independent random generator so this patch does not alter
+    # the existing assay simulation random sequence.
+    # --------------------------------------
+
+    rng_process = np.random.default_rng(config.seed + 777)
+
+    def rank01_array(x):
+        """
+        Convert an array into approximately 0-1 rank scale.
+        This avoids relying on absolute units and makes latent construction stable.
+        """
+        x = np.asarray(x, dtype=float)
+        order = np.argsort(x)
+        ranks = np.empty_like(order, dtype=float)
+        ranks[order] = np.linspace(0.0, 1.0, len(x))
+        return ranks
+
+    def clip01(x):
+        return np.clip(x, 0.0, 1.0)
+
+    P_rank = rank01_array(np.log1p(productivities))
+    CN_rank = rank01_array(CN_true)
+    S_rank = np.asarray(stabilities, dtype=float)
+    Q_rank = np.asarray(quality_potentials, dtype=float)
+    G_rank = np.asarray(G, dtype=float)
+
+    process_noise = lambda sd=None: rng_process.normal(
+        0.0,
+        config.process_latent_noise_sd if sd is None else sd,
+        size=config.n_clones
+    )
+
+    # Secretion burden:
+    # high productivity + high copy number + lower quality potential
+    # creates a stronger hidden process burden.
+    secretion_burden_index = clip01(
+        config.secretion_burden_P_weight * P_rank
+        + config.secretion_burden_CN_weight * CN_rank
+        + config.secretion_burden_lowQ_weight * (1.0 - Q_rank)
+        + process_noise()
+    )
+
+    # Super clones are biologically more robust despite high productivity.
+    secretion_burden_index = clip01(
+        secretion_burden_index
+        - is_super.astype(float) * config.super_burden_relief_latent
+    )
+
+    # Nutrient utilization:
+    # higher quality/stability/platform tends to improve productive nutrient use,
+    # while high secretion burden makes feed response less efficient.
+    nutrient_utilization_efficiency = clip01(
+        0.35
+        + 0.25 * Q_rank
+        + 0.15 * S_rank
+        + 0.10 * G_rank
+        - 0.15 * secretion_burden_index
+        + process_noise()
+    )
+
+    # Stress adaptation:
+    # captures tolerance to process stress, temperature shift,
+    # high-density culture, and late-stage burden.
+    stress_adaptation_capacity = clip01(
+        0.30
+        + 0.35 * S_rank
+        + 0.20 * Q_rank
+        + 0.10 * G_rank
+        - 0.15 * secretion_burden_index
+        + is_super.astype(float) * config.super_stress_adapt_bonus
+        - is_aggr.astype(float) * config.aggressive_stress_adapt_penalty
+        + process_noise()
+    )
+
+    # Perfusion rescue:
+    # clones with higher burden, lower stability, or lower quality
+    # may benefit more from media exchange / waste removal.
+    # Aggressive clones can have partial rescue potential,
+    # but this is not guaranteed.
+    perfusion_rescue_potential = clip01(
+        0.20
+        + 0.25 * secretion_burden_index
+        + 0.20 * (1.0 - S_rank)
+        + 0.15 * (1.0 - Q_rank)
+        + is_aggr.astype(float) * config.aggressive_perfusion_rescue_bonus
+        - is_super.astype(float) * 0.04
+        + process_noise()
+    )
+
+    # Temperature shift response:
+    # high-burden clones may gain productivity/quality benefit from mild hypothermia,
+    # but only if they retain some stress adaptation capacity.
+    temperature_shift_responsiveness = clip01(
+        0.20
+        + 0.30 * secretion_burden_index
+        + 0.20 * stress_adaptation_capacity
+        + 0.10 * (1.0 - S_rank)
+        + process_noise()
+    )
+
+    # Feed responsiveness:
+    # high nutrient utilization and productivity potential increase response to feed,
+    # while excessive burden reduces usable response.
+    feed_responsiveness = clip01(
+        0.25
+        + 0.35 * nutrient_utilization_efficiency
+        + 0.20 * P_rank
+        - 0.15 * secretion_burden_index
+        + process_noise()
+    )
+
+    # Process risk sensitivity:
+    # clones with high secretion burden and low stress adaptation are more likely
+    # to suffer aggregation or stability penalties under aggressive process conditions.
+    process_risk_sensitivity = clip01(
+        0.25
+        + 0.30 * secretion_burden_index
+        + 0.25 * (1.0 - stress_adaptation_capacity)
+        + 0.10 * (1.0 - Q_rank)
+        + is_aggr.astype(float) * config.aggressive_process_risk_bonus
+        + process_noise()
+    )
+
+    # --------------------------------------
+    # Product quality / glycosylation latent variables
+    # --------------------------------------
+    # These variables represent clone-level tendency for mAb product quality.
+    #
+    # They are not direct early ML features.
+    # They are exported to latent truth CSV and used later in Notebook09.
+    #
+    # Biological assumptions:
+    # - Higher stress adaptation supports mature glycan processing.
+    # - Higher process risk / secretion burden increases high-mannose
+    #   and aggregation-related quality risk.
+    # - Very high productivity can reduce galactosylation tendency,
+    #   representing productivity-quality tradeoff.
+    # --------------------------------------
+
+    rng_glyco = np.random.default_rng(config.seed + 909)
+
+    glyco_noise = lambda sd=None: rng_glyco.normal(
+        0.0,
+        config.glyco_latent_noise_sd if sd is None else sd,
+        size=config.n_clones
+    )
+
+    # Base latent quality traits
+    glycan_maturity_base = rng_glyco.beta(5, 2, size=config.n_clones)
+    galactosylation_base = rng_glyco.beta(4, 3, size=config.n_clones)
+    sialylation_base = rng_glyco.beta(3, 4, size=config.n_clones)
+    mannose_retention_base = rng_glyco.beta(2, 5, size=config.n_clones)
+    aggregation_propensity_base = rng_glyco.beta(2, 4, size=config.n_clones)
+    quality_consistency_base = rng_glyco.beta(5, 2, size=config.n_clones)
+
+    # Glycan maturity:
+    # improved by stress adaptation, reduced by process risk.
+    glycan_maturity = clip01(
+        glycan_maturity_base
+        + config.glycan_maturity_stress_adapt_weight * stress_adaptation_capacity
+        - config.glycan_maturity_process_risk_penalty * process_risk_sensitivity
+        + glyco_noise()
+    )
+
+    # Galactosylation:
+    # improves with glycan maturity but may be reduced by very high qP/productivity burden.
+    galactosylation_level = clip01(
+        galactosylation_base
+        + config.galactosylation_maturity_weight * glycan_maturity
+        - config.galactosylation_qp_penalty_weight * P_rank
+        + glyco_noise()
+    )
+
+    # Sialylation:
+    # depends on mature glycan processing and stress-adapted phenotype.
+    sialylation_capacity = clip01(
+        sialylation_base
+        + config.sialylation_maturity_weight * glycan_maturity
+        + config.sialylation_stress_adapt_weight * stress_adaptation_capacity
+        + glyco_noise()
+    )
+
+    # High-mannose retention risk:
+    # increased by process risk and secretion burden,
+    # reduced indirectly when glycan maturity is high.
+    mannose_retention_risk = clip01(
+        mannose_retention_base
+        + config.mannose_process_risk_weight * process_risk_sensitivity
+        + config.mannose_burden_weight * secretion_burden_index
+        - 0.15 * glycan_maturity
+        + glyco_noise()
+    )
+
+    # Aggregation propensity:
+    # linked to process risk, secretion burden, and low stress adaptation.
+    aggregation_propensity = clip01(
+        aggregation_propensity_base
+        + config.aggregation_process_risk_weight * process_risk_sensitivity
+        + config.aggregation_burden_weight * secretion_burden_index
+        - config.aggregation_stress_adapt_relief * stress_adaptation_capacity
+        + glyco_noise()
+    )
+
+    # Product quality consistency:
+    # robust clones maintain glycan/quality profile across process variation.
+    product_quality_consistency = clip01(
+        quality_consistency_base
+        + config.quality_consistency_stress_adapt_weight * stress_adaptation_capacity
+        - config.quality_consistency_process_risk_penalty * process_risk_sensitivity
+        - config.quality_consistency_burden_penalty * secretion_burden_index
+        + glyco_noise()
+    )
 
     # Hidden late-only clone factors
     # These are not directly visible from early observed features
@@ -712,9 +991,25 @@ def main() -> None:
         "aggressive_titer_mult_i": aggressive_titer_mult_i,
         "aggressive_late_decay_i": aggressive_late_decay_i,
         "hidden_vcd_residual" : hidden_vcd_residual,
+        
+        # Clone × process response latent variables
+        "nutrient_utilization_efficiency": nutrient_utilization_efficiency,
+        "stress_adaptation_capacity": stress_adaptation_capacity,
+        "perfusion_rescue_potential": perfusion_rescue_potential,
+        "temperature_shift_responsiveness": temperature_shift_responsiveness,
+        "feed_responsiveness": feed_responsiveness,
+        "secretion_burden_index": secretion_burden_index,
+        "process_risk_sensitivity": process_risk_sensitivity,
+
+        # Product quality / glycosylation latent variables
+        "glycan_maturity": glycan_maturity,
+        "galactosylation_level": galactosylation_level,
+        "sialylation_capacity": sialylation_capacity,
+        "mannose_retention_risk": mannose_retention_risk,
+        "aggregation_propensity": aggregation_propensity,
+        "product_quality_consistency": product_quality_consistency,
     })
-    
-    
+        
     latents.to_csv(out_dir / f"clone_latent_truths_{config.n_clones}_{args.scenario}.csv", index=False)
 
     # Lookup maps for fast access inside passage loop
@@ -1136,7 +1431,31 @@ def main() -> None:
     print(f"P quantiles:", np.quantile(latents["productivity"], [0.25, 0.5, 0.75]))
     print(f"S mean:", np.mean(latents["stability"]))
     print(f"Q mean:", np.mean(latents["quality_potential"]))
+    
+    print("Process-response latent means:")
+    print(
+        latents[[
+            "nutrient_utilization_efficiency",
+            "stress_adaptation_capacity",
+            "perfusion_rescue_potential",
+            "temperature_shift_responsiveness",
+            "feed_responsiveness",
+            "secretion_burden_index",
+            "process_risk_sensitivity",
+        ]].mean().round(3).to_dict()
+    )
 
+    print("Product-quality / glycosylation latent means:")
+    print(
+        latents[[
+            "glycan_maturity",
+            "galactosylation_level",
+            "sialylation_capacity",
+            "mannose_retention_risk",
+            "aggregation_propensity",
+            "product_quality_consistency",
+        ]].mean().round(3).to_dict()
+    )
 if __name__ == "__main__":
     main()
 
