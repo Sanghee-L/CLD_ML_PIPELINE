@@ -1,0 +1,9 @@
+process_condition,pareto_count,feasible_count,pareto_rate
+stress_minimized,89.0,647,0.1375579598145286
+mild_temp_shift,2.0,632,0.0031645569620253164
+balanced_feed,1.0,588,0.0017006802721088435
+adaptive_perfusion,0.0,605,0.0
+baseline,0.0,494,0.0
+nutrient_limited,0.0,590,0.0
+perfusion_like,0.0,619,0.0
+rich_media,0.0,440,0.0
