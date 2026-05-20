@@ -1,0 +1,9 @@
+metric,calibration_category,interpretation
+late_productivity_proxy,Borderline,Mostly plausible but may need tuning if this metric is strategically important.
+late_aggregation,Excellent,Strong biological plausibility. No immediate tuning needed.
+stability_drop,Excellent,Strong biological plausibility. No immediate tuning needed.
+mannose_retention_risk,Needs tuning,Potential realism issue. Generator tuning recommended.
+galactosylation_level,Needs tuning,Potential realism issue. Generator tuning recommended.
+sialylation_capacity,Needs tuning,Potential realism issue. Generator tuning recommended.
+aggregation_propensity,Excellent,Strong biological plausibility. No immediate tuning needed.
+quality_consistency,Excellent,Strong biological plausibility. No immediate tuning needed.

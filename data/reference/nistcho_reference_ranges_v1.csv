@@ -1,0 +1,9 @@
+metric,lower_bound,upper_bound,expected_direction,source_type,notes
+late_productivity_proxy,0.0,10.0,higher_is_better,reference-informed,qP-like late productivity proxy; not direct g/L titer.
+late_aggregation,1.0,15.0,lower_is_better,reference-informed,Predicted late aggregation plausibility range.
+stability_drop,0.0,0.7,lower_is_better,reference-informed,Late productivity decline fraction.
+mannose_retention_risk,0.05,0.6,lower_is_better,reference-informed,Normalized high-mannose-like risk.
+galactosylation_level,0.2,0.8,target_range,reference-informed,Normalized terminal galactosylation tendency.
+sialylation_capacity,0.05,0.7,target_range,reference-informed,Normalized sialylation capacity.
+aggregation_propensity,0.0,0.7,lower_is_better,reference-informed,Latent aggregation tendency after process simulation.
+quality_consistency,0.5,1.0,higher_is_better,reference-informed,Latent product-quality robustness.
