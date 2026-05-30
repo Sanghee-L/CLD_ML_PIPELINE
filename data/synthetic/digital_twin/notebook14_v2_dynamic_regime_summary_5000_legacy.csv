@@ -1,5 +1,5 @@
-dynamic_regime,reward,productivity_state,integrated_burden,stress_failure_risk,galactosylation,sialylation,overflow_burden
-0,0.23,0.097,0.111,0.21,0.769,0.687,0.174
-1,0.085,0.287,0.529,0.62,0.562,0.562,0.549
-2,0.366,0.258,0.024,0.04,0.881,0.86,0.099
-3,0.136,0.08,0.29,0.415,0.694,0.615,0.327
+regime_name,reward,productivity_state,integrated_burden,stress_failure_risk,galactosylation,sialylation,overflow_burden
+Productive_Rescued,0.366,0.258,0.024,0.04,0.881,0.86,0.099
+Adaptive_Quality,0.23,0.097,0.111,0.21,0.769,0.687,0.174
+Burdened_LowQuality,0.136,0.08,0.29,0.415,0.694,0.615,0.327
+Stress_HighRisk,0.085,0.287,0.529,0.62,0.562,0.562,0.549
