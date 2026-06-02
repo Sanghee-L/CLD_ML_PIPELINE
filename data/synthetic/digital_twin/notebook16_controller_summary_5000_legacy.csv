@@ -1,0 +1,4 @@
+controller,reward,productivity_state,integrated_burden,stress_failure_risk,galactosylation
+No_Action,-0.199,0.067,0.286,0.324,0.707
+RL,0.094,0.085,0.175,0.171,0.732
+Rule,0.049,0.263,0.298,0.261,0.707
