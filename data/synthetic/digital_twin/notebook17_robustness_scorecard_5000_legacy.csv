@@ -1,0 +1,4 @@
+controller,reward,productivity_state,galactosylation
+No_Action,-0.199,0.065,0.69
+RL,0.095,0.082,0.714
+Rule,0.049,0.254,0.69
