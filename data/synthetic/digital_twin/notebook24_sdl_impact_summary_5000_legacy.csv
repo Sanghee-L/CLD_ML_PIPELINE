@@ -1,0 +1,7 @@
+metric,value
+starting_clone_pool,5000.0
+unique_evaluated_final_candidates,33.0
+super_clone_candidates,1.0
+aggressive_false_positive_candidates,0.0
+screening_reduction_to_final_candidates,0.9934
+screening_reduction_to_super_clones,0.9998

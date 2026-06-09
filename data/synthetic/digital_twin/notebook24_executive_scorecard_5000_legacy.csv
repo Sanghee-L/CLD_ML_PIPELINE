@@ -1,0 +1,4 @@
+clone_archetype,n,mean_final_score,mean_titer,mean_qp,mean_stability,mean_quality,mean_roi,pareto_rate
+DEVELOPMENT,16,50.753,1.804,9.678,94.456,91.964,0.571,1.0
+REJECT,16,38.418,1.663,10.183,90.766,88.769,-1.903,1.0
+SUPER,1,73.815,6.883,41.701,91.539,87.838,1.895,1.0

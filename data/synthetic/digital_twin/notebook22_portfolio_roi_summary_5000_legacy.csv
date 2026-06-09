@@ -1,0 +1,10 @@
+metric,value
+total_engineering_projects,36.0
+major_or_moderate_improvements,2.0
+negative_outcomes,11.0
+mean_titer_gain_g_L,0.068
+mean_qp_gain_pg_cell_day,0.586
+mean_stability_gain_pct,0.049
+mean_quality_gain_pct,-0.197
+mean_experimental_roi_score,-0.56
+estimated_useful_project_rate,0.056

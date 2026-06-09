@@ -1,0 +1,37 @@
+clone_id,recommended_intervention,experimental_outcome,engineering_result_class,titer_before_g_L,titer_after_g_L,delta_titer_g_L,qp_before_pg_cell_day,qp_after_pg_cell_day,delta_qp_pg_cell_day,stability_before_pct,stability_after_pct,delta_stability_pct,quality_before_pct,quality_after_pct,delta_quality_pct,engineering_gain,realized_gain,experimental_roi_score
+CLONE_1091,XBP1s_secretory_support,strong_success,Moderate Improvement,1.966,2.603,0.637,10.025,13.089,3.064,89.982,89.479,-0.503,86.904,85.258,-1.646,20.205,20.205,4.996
+CLONE_0080,XBP1s_secretory_support,strong_success,Moderate Improvement,1.91,2.484,0.575,7.863,8.913,1.049,93.931,94.769,0.838,92.18,92.092,-0.089,19.658,19.658,4.014
+CLONE_3895,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.939,2.371,0.432,8.768,9.726,0.957,92.905,94.338,1.433,96.362,96.272,-0.09,19.546,19.546,2.963
+CLONE_0894,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.739,1.915,0.177,10.248,11.939,1.691,94.804,95.774,0.97,91.944,95.18,3.236,17.128,17.128,2.08
+CLONE_3527,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.563,1.716,0.153,11.582,15.417,3.835,91.857,91.926,0.069,90.384,90.101,-0.283,15.917,15.917,2.075
+CLONE_1437,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.777,2.015,0.238,10.515,12.692,2.177,91.058,91.516,0.458,91.255,91.797,0.541,16.473,16.473,2.06
+CLONE_4625,PDI_folding_support,partial_success,Neutral / Small Change,6.624,6.883,0.258,40.418,41.701,1.283,91.493,91.539,0.046,84.852,87.838,2.986,15.993,15.993,1.895
+CLONE_3895,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.5,1.656,0.156,9.851,12.491,2.64,91.436,92.266,0.831,96.685,96.976,0.29,16.032,16.032,1.715
+CLONE_0834,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.816,2.076,0.26,10.577,12.719,2.142,92.106,92.218,0.112,84.614,82.488,-2.126,16.635,16.635,1.458
+CLONE_4425,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.966,2.388,0.422,6.959,6.226,-0.733,90.019,89.166,-0.853,91.764,91.863,0.099,19.431,19.431,1.347
+CLONE_3895,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.5,1.656,0.156,8.717,10.33,1.613,90.664,90.915,0.251,100.0,100.0,0.0,16.032,16.032,0.882
+CLONE_1371,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.423,1.523,0.1,7.328,7.776,0.449,96.214,99.131,2.917,93.379,95.293,1.914,15.573,15.573,0.878
+CLONE_2985,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.471,1.625,0.154,7.555,8.266,0.711,91.294,91.502,0.209,89.417,88.862,-0.555,16.048,16.048,0.173
+CLONE_2723,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.988,2.193,0.205,8.128,6.947,-1.181,91.541,91.389,-0.152,88.862,91.137,2.275,17.251,17.251,0.065
+CLONE_3826,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.333,1.231,-0.102,11.053,14.168,3.116,95.984,98.137,2.153,89.382,88.733,-0.649,13.675,13.675,0.03
+CLONE_3007,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.361,1.433,0.072,7.243,7.792,0.549,98.363,99.556,1.193,91.111,89.208,-1.903,15.375,15.375,-0.672
+CLONE_1591,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.293,1.123,-0.17,10.081,12.135,2.054,93.437,95.51,2.073,98.85,100.0,1.15,13.05,13.05,-0.721
+CLONE_1045,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.565,1.547,-0.018,9.235,9.824,0.589,91.984,91.67,-0.314,92.58,93.75,1.17,15.297,15.297,-0.975
+CLONE_3546,XBP1s_secretory_support,negative_tradeoff,Neutral / Small Change,1.709,1.782,0.073,8.742,8.756,0.013,95.716,97.895,2.179,90.01,87.124,-2.886,18.145,1.563,-0.984
+CLONE_1502,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.275,1.177,-0.098,10.074,12.381,2.307,90.45,90.796,0.346,90.867,89.331,-1.536,14.684,14.684,-1.098
+CLONE_1145,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.41,1.383,-0.028,10.013,11.988,1.975,92.0,90.077,-1.923,83.793,82.568,-1.225,15.299,15.299,-1.224
+CLONE_2526,XBP1s_secretory_support,strong_success,Neutral / Small Change,1.26,1.228,-0.032,6.729,6.76,0.031,91.22,91.126,-0.095,90.035,91.115,1.08,14.474,14.474,-1.39
+CLONE_3269,XBP1s_secretory_support,neutral,Neutral / Small Change,1.817,1.93,0.113,7.724,6.671,-1.053,94.076,94.362,0.286,89.725,87.697,-2.028,17.585,17.585,-1.563
+CLONE_2827,XBP1s_secretory_support,failure,Neutral / Small Change,1.593,1.586,-0.007,8.049,7.606,-0.443,94.665,94.657,-0.008,91.951,92.311,0.36,16.722,16.722,-1.636
+CLONE_1719,XBP1s_secretory_support,partial_success,Neutral / Small Change,1.409,1.392,-0.017,7.33,7.164,-0.165,88.355,88.999,0.644,91.593,89.949,-1.643,15.411,15.411,-1.882
+CLONE_3186,XBP1s_secretory_support,negative_tradeoff,Negative Outcome,1.786,1.739,-0.047,10.132,10.034,-0.098,90.437,88.574,-1.863,93.57,94.281,0.712,16.984,-0.453,-2.124
+CLONE_4843,XBP1s_secretory_support,partial_success,Negative Outcome,1.187,0.98,-0.207,10.23,12.465,2.236,88.736,86.741,-1.995,92.124,92.177,0.053,13.651,13.651,-2.202
+CLONE_4629,XBP1s_secretory_support,negative_tradeoff,Negative Outcome,1.394,1.227,-0.168,10.184,11.153,0.97,91.111,89.684,-1.427,94.829,95.481,0.653,15.569,-0.622,-2.354
+CLONE_1633,XBP1s_secretory_support,negative_tradeoff,Negative Outcome,1.712,1.773,0.062,7.524,6.617,-0.907,88.246,84.614,-3.631,94.807,94.785,-0.023,18.035,2.789,-2.362
+CLONE_0908,XBP1s_secretory_support,strong_success,Negative Outcome,1.279,1.222,-0.057,6.217,5.524,-0.693,93.303,94.01,0.708,86.287,85.108,-1.179,14.198,14.198,-2.388
+CLONE_3249,XBP1s_secretory_support,partial_success,Negative Outcome,1.533,1.54,0.007,6.008,4.244,-1.764,93.069,92.94,-0.13,92.45,92.348,-0.102,15.561,15.561,-2.464
+CLONE_1361,XBP1s_secretory_support,negative_tradeoff,Negative Outcome,1.323,1.008,-0.315,11.894,13.481,1.587,95.197,94.809,-0.388,83.725,83.527,-0.198,14.058,-2.821,-3.113
+CLONE_3895,XBP1s_secretory_support,neutral,Negative Outcome,1.72,1.854,0.134,5.718,3.746,-1.972,86.022,81.843,-4.18,92.727,89.574,-3.153,17.795,17.795,-3.346
+CLONE_3239,XBP1s_secretory_support,negative_tradeoff,Negative Outcome,1.317,1.035,-0.282,7.233,5.828,-1.405,94.368,94.324,-0.044,93.143,94.628,1.486,14.385,2.783,-4.139
+CLONE_0678,XBP1s_secretory_support,strong_success,Negative Outcome,1.172,0.948,-0.224,5.437,3.638,-1.799,92.899,92.846,-0.053,88.312,87.147,-1.164,12.673,12.673,-4.574
+CLONE_4878,PDI_folding_support,negative_tradeoff,Negative Outcome,5.449,5.275,-0.175,29.578,25.84,-3.738,89.427,91.024,1.597,82.731,80.12,-2.612,14.723,-3.698,-5.595

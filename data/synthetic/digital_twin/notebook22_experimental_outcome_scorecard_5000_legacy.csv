@@ -1,0 +1,9 @@
+metric,value
+engineering_experiments,36.0
+mean_delta_titer_g_L,0.068
+mean_delta_qp_pg_cell_day,0.586
+mean_delta_stability_pct,0.049
+mean_delta_quality_pct,-0.197
+mean_experimental_roi_score,-0.56
+major_improvement_count,0.0
+negative_outcome_count,11.0
